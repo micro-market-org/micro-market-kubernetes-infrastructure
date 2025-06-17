@@ -12,6 +12,7 @@ spec:
                 - env: ${ENV}
                   registry: ${REGISTRY}
                   provider: ${PROVIDER}
+                  project: ${PROJECT_NAME}
           - list:
               elements:
                 - name: catalog
@@ -24,7 +25,7 @@ spec:
                   path: micro-market-frontend
   template:
     metadata:
-      name: '{{name}}-{{env}}'
+      name: '{{name}}'
       namespace: argocd
       labels:
         environment: '{{env}}'
@@ -43,9 +44,9 @@ spec:
             - name: global.environment
               value: '{{env}}'
             - name: image.repository
-              value: '{{registry}}/microservices1691717/{{name}}'
+              value: '{{registry}}/{{project}}/{{name}}'
             - name: global.domain
-              value: 'microservices1691717.westeurope.cloudapp.azure.com'
+              value: '{{project}}.westeurope.cloudapp.azure.com'
       destination:
         server: https://kubernetes.default.svc
         namespace: 'microservices'

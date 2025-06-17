@@ -127,7 +127,7 @@ plan:
         terraform workspace new "$WORKSPACE"
       fi
       terraform workspace select "$WORKSPACE"
-    - terraform plan --var-file=./tfvars_files/$WORKSPACE.tfvars -var project_name="microservices1691719" -var environment="$WORKSPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME" -out=tfplan
+    - terraform plan --var-file=./tfvars_files/$WORKSPACE.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME" -out=tfplan
     - terraform show -json tfplan > plan.json
   artifacts:
     paths:
@@ -180,12 +180,13 @@ apply:
         cat ./configs/argocd_application.yaml.template | \
           sed "s/\${ENV}/$WORKSPACE/g" | \
           sed "s/\${REGISTRY}/$CONTAINER_REGISTRY_NAME/g" | \
+          sed "s/\${PROJECT_NAME}/$PROJECT_NAMESPACE/g" | \
           sed "s/\${PROVIDER}/$CLOUD_PROVIDER/g" > ./configs/argocd_application.yaml
 
         kubectl apply -f ./configs/argocd_application.yaml
 
-        PUBLIC_IP_NAME=$(az network public-ip list --resource-group rg-$CI_PROJECT_NAMESPACE-$WORKSPACE-aks --query "[?contains(name, 'kubernetes-')].name" -o tsv)
-        az network public-ip update --resource-group rg-$CI_PROJECT_NAMESPACE-$WORKSPACE-aks --name $PUBLIC_IP_NAME --dns-name $CI_PROJECT_NAMESPACE
+        PUBLIC_IP_NAME=$(az network public-ip list --resource-group rg-$PROJECT_NAMESPACE-$WORKSPACE-aks --query "[?contains(name, 'kubernetes-')].name" -o tsv)
+        az network public-ip update --resource-group rg-$PROJECT_NAMESPACE-$WORKSPACE-aks --name $PUBLIC_IP_NAME --dns-name $PROJECT_NAMESPACE
       fi
   dependencies:
     - plan
