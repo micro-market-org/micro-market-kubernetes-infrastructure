@@ -85,7 +85,7 @@ validate:
             -backend-config="resource_group_name=rg-infrastructure" \
             -backend-config="storage_account_name=terraformmicrostate" \
             -backend-config="container_name=tfstate" \
-            -backend-config="key=kubernetes.tfstateenv:${WORKSPACE}"
+            -backend-config="key=kubernetes.tfstate"
           ;;
         gcp)
           terraform init \
@@ -94,6 +94,9 @@ validate:
             -backend-config="credentials=${TF_VAR_gcp_credentials}"
           ;;
       esac
+      if ! terraform workspace list | grep -q "$WORKSPACE"; then
+        terraform workspace new "$WORKSPACE"
+      fi
     - terraform validate
     - terraform fmt -check -diff
 
@@ -121,7 +124,7 @@ plan:
             -backend-config="resource_group_name=rg-infrastructure" \
             -backend-config="storage_account_name=terraformmicrostate" \
             -backend-config="container_name=tfstate" \
-            -backend-config="key=kubernetes.tfstateenv:${WORKSPACE}"
+            -backend-config="key=kubernetes.tfstate"
           ;;
         gcp)
           terraform init \
@@ -131,9 +134,6 @@ plan:
           ;;
       esac
     - |
-      if ! terraform workspace list | grep -q "$WORKSPACE"; then
-        terraform workspace new "$WORKSPACE"
-      fi
       terraform workspace select "$WORKSPACE"
     - terraform plan --var-file=./tfvars_files/$WORKSPACE.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME" -out=tfplan
     - terraform show -json tfplan > plan.json
@@ -169,7 +169,7 @@ apply:
             -backend-config="resource_group_name=rg-infrastructure" \
             -backend-config="storage_account_name=terraformmicrostate" \
             -backend-config="container_name=tfstate" \
-            -backend-config="key=kubernetes.tfstateenv:${WORKSPACE}"
+            -backend-config="key=kubernetes.tfstate"
           ;;
         gcp)
           terraform init \
