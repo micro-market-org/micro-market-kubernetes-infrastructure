@@ -20,7 +20,7 @@ resource "kubernetes_secret_v1" "grafana_oauth_secret" {
   }
 
   data = {
-    "GRAFANA_OIDC_CLIENT_SECRET" = random_password.grafana_password.result
+    "GRAFANA_OIDC_CLIENT_SECRET" = random_password.grafana_oidc_client_secret.result
     "DOMAIN"                     = local.current_domain
   }
 }
