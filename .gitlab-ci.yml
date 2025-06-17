@@ -85,7 +85,7 @@ validate:
             -backend-config="resource_group_name=rg-infrastructure" \
             -backend-config="storage_account_name=terraformmicrostate" \
             -backend-config="container_name=tfstate" \
-            -backend-config="key=kubernetes.tfstateenv:${$WORKSPACE}"
+            -backend-config="key=kubernetes.tfstateenv:${WORKSPACE}"
           ;;
         gcp)
           terraform init \
@@ -121,7 +121,7 @@ plan:
             -backend-config="resource_group_name=rg-infrastructure" \
             -backend-config="storage_account_name=terraformmicrostate" \
             -backend-config="container_name=tfstate" \
-            -backend-config="key=kubernetes.tfstateenv:${$WORKSPACE}"
+            -backend-config="key=kubernetes.tfstateenv:${WORKSPACE}"
           ;;
         gcp)
           terraform init \
@@ -169,7 +169,7 @@ apply:
             -backend-config="resource_group_name=rg-infrastructure" \
             -backend-config="storage_account_name=terraformmicrostate" \
             -backend-config="container_name=tfstate" \
-            -backend-config="key=kubernetes.tfstateenv:${$WORKSPACE}"
+            -backend-config="key=kubernetes.tfstateenv:${WORKSPACE}"
           ;;
         gcp)
           terraform init \
