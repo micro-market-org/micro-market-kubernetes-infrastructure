@@ -2,10 +2,15 @@ loki:
   auth_enabled: false
   storage:
     type: filesystem
+  storage_config:
+    filesystem:
+      directory: /var/loki/chunks
   commonConfig:
     replication_factor: 1
+    path_prefix: /var/loki
   compactor:
     shared_store: filesystem
+    working_directory: /var/loki/compactor
   limits_config:
     retention_period: 7d
   ruler:
@@ -26,6 +31,11 @@ singleBinary:
     requests:
       cpu: 100m
       memory: 256Mi
+  extraVolumeMounts:
+    - name: storage
+      mountPath: /var/loki/chunks
+    - name: storage
+      mountPath: /var/loki/compactor
 
 monitoring:
   selfMonitoring:

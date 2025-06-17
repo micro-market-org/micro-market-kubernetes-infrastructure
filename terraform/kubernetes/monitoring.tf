@@ -93,6 +93,26 @@ resource "helm_release" "loki" {
   }
 
   set {
+    name  = "singleBinary.persistence.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "singleBinary.persistence.size"
+    value = "10Gi"
+  }
+
+  set {
+    name  = "singleBinary.persistence.storageClassName"
+    value = "managed-csi"
+  }
+
+  set {
+    name  = "singleBinary.persistence.name"
+    value = "storage"
+  }
+
+  set {
     name  = "loki.schemaConfig.configs[0].from"
     value = "2023-01-01"
   }
