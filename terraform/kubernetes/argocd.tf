@@ -47,7 +47,7 @@ resource "helm_release" "argocd" {
   chart            = "argo-cd"
   version          = "8.0.15"
   namespace        = kubernetes_namespace_v1.argocd.metadata[0].name
-  depends_on = [helm_release.cert_manager]
+  depends_on       = [helm_release.cert_manager]
   create_namespace = false
   values = [
     templatefile("${path.root}/configs/argocd_config.yaml", {

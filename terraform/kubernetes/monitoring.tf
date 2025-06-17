@@ -34,7 +34,7 @@ resource "helm_release" "kube-prometheus" {
   chart      = "kube-prometheus-stack"
   depends_on = [helm_release.cert_manager]
   timeout    = 1200
-  values = [file("${path.root}/configs/kube-prometheus_config.yaml")]
+  values     = [file("${path.root}/configs/kube-prometheus_config.yaml")]
 
   set_sensitive {
     name  = "grafana.adminPassword"
@@ -70,7 +70,7 @@ resource "helm_release" "loki" {
   chart      = "loki"
   depends_on = [helm_release.kube-prometheus]
   timeout    = 600
-  values = [file("${path.root}/configs/loki_config.yaml")]
+  values     = [file("${path.root}/configs/loki_config.yaml")]
 
   # Add Loki datasource to Grafana
   set {
@@ -112,7 +112,7 @@ resource "helm_release" "promtail" {
   chart      = "promtail"
   depends_on = [helm_release.loki]
   timeout    = 300
-  values = [file("${path.root}/configs/promtail_config.yaml")]
+  values     = [file("${path.root}/configs/promtail_config.yaml")]
 }
 
 resource "kubernetes_config_map_v1" "grafana_dashboards" {

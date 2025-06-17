@@ -300,7 +300,7 @@ resource "kubernetes_ingress_v1" "ingress_keycloak" {
 
   spec {
     tls {
-      hosts = [local.current_domain]
+      hosts       = [local.current_domain]
       secret_name = "tls-secret-keycloak"
     }
 

@@ -128,27 +128,27 @@ resource "helm_release" "nginx-ingress" {
           externalTrafficPolicy = "Local"
           annotations = {
             "service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path" = var.cloud_provider == "azure" ? "/healthz" : null
-            "cloud.google.com/neg" = var.cloud_provider == "gcp" ? "{\"ingress\": true}" : null
-            "cloud.google.com/load-balancer-type" = var.cloud_provider == "gcp" ? "External" : null
+            "cloud.google.com/neg"                                                     = var.cloud_provider == "gcp" ? "{\"ingress\": true}" : null
+            "cloud.google.com/load-balancer-type"                                      = var.cloud_provider == "gcp" ? "External" : null
           }
         }
         allowSnippetAnnotations = true
         config = {
-          "enable-real-ip" = "true"
-          "proxy-body-size" = "20m"
-          "ssl-protocols" = "TLSv1.2 TLSv1.3"
-          "ssl-ciphers" = "HIGH:!aNULL:!MD5"
-          "hsts" = "true"
-          "hsts-max-age" = "31536000"
+          "enable-real-ip"          = "true"
+          "proxy-body-size"         = "20m"
+          "ssl-protocols"           = "TLSv1.2 TLSv1.3"
+          "ssl-ciphers"             = "HIGH:!aNULL:!MD5"
+          "hsts"                    = "true"
+          "hsts-max-age"            = "31536000"
           "hsts-include-subdomains" = "true"
         }
         resources = {
           requests = {
-            cpu = "200m"
+            cpu    = "200m"
             memory = "256Mi"
           }
           limits = {
-            cpu = "500m"
+            cpu    = "500m"
             memory = "512Mi"
           }
         }
@@ -175,7 +175,7 @@ resource "kubernetes_ingress_v1" "ingress_grafana" {
 
   spec {
     tls {
-      hosts = [local.current_domain]
+      hosts       = [local.current_domain]
       secret_name = "tls-secret-monitoring"
     }
 

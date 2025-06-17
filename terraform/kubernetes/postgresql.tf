@@ -15,12 +15,12 @@ resource "random_password" "postgresql_password" {
 }
 
 resource "helm_release" "postgresql" {
-  name             = "postgresql"
-  repository       = "https://charts.bitnami.com/bitnami"
-  chart            = "postgresql"
-  version          = "12.5.8"
-  namespace        = kubernetes_namespace_v1.postgresql.metadata[0].name
-  create_namespace = false
+  name              = "postgresql"
+  repository        = "https://charts.bitnami.com/bitnami"
+  chart             = "postgresql"
+  version           = "12.5.8"
+  namespace         = kubernetes_namespace_v1.postgresql.metadata[0].name
+  create_namespace  = false
   dependency_update = true
   lint              = true
   timeout           = 600

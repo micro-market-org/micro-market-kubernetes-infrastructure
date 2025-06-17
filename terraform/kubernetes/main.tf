@@ -59,7 +59,7 @@ locals {
     )
 
     client_certificate = var.cloud_provider == "azure" ? base64decode(data.terraform_remote_state.azure[0].outputs.kubernetes_client_certificate) : null
-    client_key = var.cloud_provider == "azure" ? base64decode(data.terraform_remote_state.azure[0].outputs.kubernetes_client_key) : null
+    client_key         = var.cloud_provider == "azure" ? base64decode(data.terraform_remote_state.azure[0].outputs.kubernetes_client_key) : null
 
     cluster_ca_certificate = (
       var.cloud_provider == "azure" ? base64decode(data.terraform_remote_state.azure[0].outputs.kubernetes_cluster_ca_certificate) : var.cloud_provider == "gcp" ? base64decode(data.terraform_remote_state.gcp[0].outputs.kubernetes_cluster_ca_certificate) : var.cloud_provider == "aws" ? base64decode(data.terraform_remote_state.aws[0].outputs.eks_cluster_certificate_authority_data) : null
@@ -86,7 +86,7 @@ provider "kubernetes" {
     content {
       api_version = "client.authentication.k8s.io/v1beta1"
       command     = "aws"
-      args = ["eks", "get-token", "--cluster-name", data.terraform_remote_state.aws[0].outputs.eks_cluster_name]
+      args        = ["eks", "get-token", "--cluster-name", data.terraform_remote_state.aws[0].outputs.eks_cluster_name]
     }
   }
 }
@@ -111,7 +111,7 @@ provider "helm" {
       content {
         api_version = "client.authentication.k8s.io/v1beta1"
         command     = "aws"
-        args = ["eks", "get-token", "--cluster-name", data.terraform_remote_state.aws[0].outputs.eks_cluster_name]
+        args        = ["eks", "get-token", "--cluster-name", data.terraform_remote_state.aws[0].outputs.eks_cluster_name]
       }
     }
   }
