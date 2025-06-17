@@ -146,10 +146,20 @@ plan:
 
 apply:
   stage: apply
+  image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
   <<: *terraform-cache
   when: manual
   before_script:
     - *before_script_common
+    # Install Azure CLI
+    - apt-get update && apt-get install -y ca-certificates curl apt-transport-https lsb-release gnupg
+    - curl -sL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
+    - echo "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/azure-cli.list
+    - apt-get update && apt-get install -y azure-cli
+    # Install kubectl
+    - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    - chmod +x kubectl
+    - mv kubectl /usr/local/bin/
     - cd terraform/kubernetes
     - sed -i "s/BACKEND_PLACEHOLDER/${BACKEND_TYPE}/g" main.tf
   script:
@@ -183,6 +193,13 @@ apply:
     - terraform apply -auto-approve tfplan
     - |
       if [ "${CLOUD_PROVIDER}" = "azure" ]; then
+        # Login to Azure
+        az login --service-principal -u $ARM_CLIENT_ID -p $ARM_CLIENT_SECRET --tenant $ARM_TENANT_ID
+
+        # Get AKS credentials
+        az aks get-credentials --resource-group rg-$PROJECT_NAMESPACE-$WORKSPACE-aks --name aks-$PROJECT_NAMESPACE-$WORKSPACE
+
+        # Apply Kubernetes configurations
         kubectl apply -f ./configs/production_issuer.yaml
         kubectl apply -f ./configs/argocd_network_policies.yaml
         kubectl apply -f ./configs/prometheus_recording_rules.yaml
