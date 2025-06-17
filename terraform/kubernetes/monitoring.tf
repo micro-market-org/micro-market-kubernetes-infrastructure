@@ -112,15 +112,6 @@ resource "helm_release" "loki" {
     value = "storage"
   }
 
-  set {
-    name  = "loki.schemaConfig.configs[0].from"
-    value = "2023-01-01"
-  }
-
-  set {
-    name  = "loki.schemaConfig.configs[0].schema"
-    value = "v12"
-  }
 
   set {
     name  = "loki.extraArgs"
