@@ -53,7 +53,7 @@ resource "helm_release" "keycloak" {
   namespace         = kubernetes_namespace_v1.keycloak.metadata[0].name
   create_namespace  = false
   dependency_update = true
-  timeout           = 300
+  timeout           = 900
 
   depends_on = [
     kubernetes_namespace_v1.keycloak,

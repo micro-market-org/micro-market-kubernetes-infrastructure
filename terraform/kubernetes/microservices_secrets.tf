@@ -68,29 +68,9 @@ resource "kubernetes_secret_v1" "keycloak_client_secrets" {
   }
 
   data = {
-    "audit-service-secret" = random_password.audit_client_secret.result
-  }
-}
-
-resource "kubernetes_secret_v1" "catalog_keycloak_secret" {
-  metadata {
-    name      = "keycloak-secret"
-    namespace = kubernetes_namespace_v1.microservices.metadata[0].name
-  }
-
-  data = {
+    "audit-service-secret"   = random_password.audit_client_secret.result
     "catalog-service-secret" = random_password.catalog_client_secret.result
-  }
-}
-
-resource "kubernetes_secret_v1" "orders_keycloak_secret" {
-  metadata {
-    name      = "keycloak-secret"
-    namespace = kubernetes_namespace_v1.microservices.metadata[0].name
-  }
-
-  data = {
-    "orders-service-secret" = random_password.orders_client_secret.result
+    "orders-service-secret"  = random_password.orders_client_secret.result
   }
 }
 

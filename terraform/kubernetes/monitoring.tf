@@ -26,13 +26,28 @@ resource "kubernetes_secret_v1" "grafana_oauth_secret" {
 }
 
 
+resource "helm_release" "grafana-agent-operator" {
+  name       = "grafana-agent-operator"
+  namespace  = kubernetes_namespace_v1.monitoring.metadata[0].name
+  repository = "https://grafana.github.io/helm-charts"
+  chart      = "grafana-agent-operator"
+  version    = "0.2.14"
+  depends_on = [helm_release.cert_manager]
+  timeout    = 600
+
+  set {
+    name  = "crds.enabled"
+    value = "true"
+  }
+}
+
 resource "helm_release" "kube-prometheus" {
   name       = "kube-prometheus-stack"
   namespace  = kubernetes_namespace_v1.monitoring.metadata[0].name
   version    = "57.1.0"
   repository = "https://prometheus-community.github.io/helm-charts"
   chart      = "kube-prometheus-stack"
-  depends_on = [helm_release.cert_manager]
+  depends_on = [helm_release.cert_manager, helm_release.grafana-agent-operator]
   timeout    = 1200
   values     = [file("${path.root}/configs/kube-prometheus_config.yaml")]
 
@@ -68,9 +83,20 @@ resource "helm_release" "loki" {
   version    = "5.41.5"
   repository = "https://grafana.github.io/helm-charts"
   chart      = "loki"
-  depends_on = [helm_release.kube-prometheus]
-  timeout    = 600
+  depends_on = [helm_release.kube-prometheus, helm_release.grafana-agent-operator]
+  timeout    = 900
   values     = [file("${path.root}/configs/loki_config.yaml")]
+
+  # Ensure CRDs are installed
+  set {
+    name  = "crds.create"
+    value = "true"
+  }
+
+  set {
+    name  = "loki.schemaConfig.configs[0].from"
+    value = "2023-01-01"
+  }
 
   # Add Loki datasource to Grafana
   set {
