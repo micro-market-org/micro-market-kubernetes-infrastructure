@@ -1,2 +1,2 @@
-environment  = "staging"
+environment    = "staging"
 cluster_issuer = "letsencrypt-production-cluster-issuer"
