@@ -14,7 +14,6 @@ variables:
   TF_ROOT: terraform/kubernetes
   WORKSPACE: ${CI_COMMIT_REF_NAME}
 
-# Reusable components
 .terraform-cache: &terraform-cache
   cache:
     key: ${CI_COMMIT_REF_SLUG}-${CLOUD_PROVIDER}
@@ -26,9 +25,11 @@ variables:
 .configure-environment: &configure-environment
   - mkdir -p $TF_PLUGIN_CACHE_DIR
   - |
+    # Normalize workspace name from branch
     WORKSPACE=$(echo ${WORKSPACE} | tr -cd '[:alnum:]-' | tr '[:upper:]' '[:lower:]')
     echo "Using workspace: $WORKSPACE"
     
+    # Configure provider-specific variables
     case "${CLOUD_PROVIDER}" in
       aws)
         export TF_VAR_aws_access_key=$AWS_ACCESS_KEY_ID
@@ -37,12 +38,6 @@ variables:
         export TF_VAR_aws_region=${AWS_REGION:-us-east-1}
         export TF_VAR_cloud_provider="aws"
         export BACKEND_TYPE="s3"
-        export BACKEND_CONFIG="-backend-config=\"bucket=terraform-microservices1691715-state\" \
-          -backend-config=\"key=terraform.tfstate\" \
-          -backend-config=\"region=${TF_VAR_aws_region}\" \
-          -backend-config=\"access_key=${TF_VAR_aws_access_key}\" \
-          -backend-config=\"secret_key=${TF_VAR_aws_secret_key}\" \
-          -backend-config=\"token=${TF_VAR_aws_session_token}\""
         ;;
       azure)
         export TF_VAR_client_id=$ARM_CLIENT_ID
@@ -51,10 +46,6 @@ variables:
         export TF_VAR_subscription_id=$ARM_SUBSCRIPTION_ID
         export TF_VAR_cloud_provider="azure"
         export BACKEND_TYPE="azurerm"
-        export BACKEND_CONFIG="-backend-config=\"resource_group_name=rg-infrastructure\" \
-          -backend-config=\"storage_account_name=terraformmicrostate\" \
-          -backend-config=\"container_name=tfstate\" \
-          -backend-config=\"key=kubernetes.tfstate\""
         ;;
       gcp)
         echo "$GCP_SERVICE_ACCOUNT_KEY" > gcp-credentials.json
@@ -65,9 +56,6 @@ variables:
         export TF_VAR_gcp_zone=${GCP_ZONE:-europe-central2-a}
         export TF_VAR_cloud_provider="gcp"
         export BACKEND_TYPE="gcs"
-        export BACKEND_CONFIG="-backend-config=\"bucket=terraformmicroservicesstate\" \
-          -backend-config=\"prefix=kubernetes/state\" \
-          -backend-config=\"credentials=${TF_VAR_gcp_credentials}\""
         ;;
       *)
         echo "ERROR: Unsupported cloud provider: ${CLOUD_PROVIDER}. Must be one of: aws, azure, gcp"
@@ -79,7 +67,31 @@ variables:
   - cd ${TF_ROOT}
   - sed -i "s/BACKEND_PLACEHOLDER/${BACKEND_TYPE}/g" main.tf
   - echo "Initializing Terraform with ${BACKEND_TYPE} backend..."
-  - eval terraform init ${BACKEND_CONFIG}
+  - |
+    case "${CLOUD_PROVIDER}" in
+      aws)
+        terraform init \
+          -backend-config="bucket=terraform-microservices1691715-state" \
+          -backend-config="key=terraform.tfstate" \
+          -backend-config="region=${TF_VAR_aws_region}" \
+          -backend-config="access_key=${TF_VAR_aws_access_key}" \
+          -backend-config="secret_key=${TF_VAR_aws_secret_key}" \
+          -backend-config="token=${TF_VAR_aws_session_token}"
+        ;;
+      azure)
+        terraform init -migrate-state \
+          -backend-config="resource_group_name=rg-infrastructure" \
+          -backend-config="storage_account_name=terraformmicrostate" \
+          -backend-config="container_name=tfstate" \
+          -backend-config="key=kubernetes.tfstate"
+        ;;
+      gcp)
+        terraform init \
+          -backend-config="bucket=terraformmicroservicesstate" \
+          -backend-config="prefix=kubernetes/state" \
+          -backend-config="credentials=${TF_VAR_gcp_credentials}"
+        ;;
+    esac
   - |
     # Setup workspace
     if ! terraform workspace list | grep -q "$WORKSPACE"; then
@@ -90,33 +102,6 @@ variables:
       terraform workspace select "$WORKSPACE"
     fi
     echo "Current workspace: $(terraform workspace show)"
-
-.post-apply-azure: &post-apply-azure
-  - |
-    if [ "${CLOUD_PROVIDER}" = "azure" ]; then
-      echo "Configuring Azure AKS post-deployment..."
-      az login --service-principal -u $ARM_CLIENT_ID -p $ARM_CLIENT_SECRET --tenant $ARM_TENANT_ID
-      az aks get-credentials --resource-group rg-$PROJECT_NAMESPACE-$WORKSPACE-aks --name aks-$PROJECT_NAMESPACE-$WORKSPACE
-    
-      kubectl apply -f ./configs/production_issuer.yaml
-      kubectl apply -f ./configs/argocd_network_policies.yaml
-      kubectl apply -f ./configs/prometheus_recording_rules.yaml
-      kubectl apply -f ./configs/prometheus_alerting_rules.yaml
-      kubectl apply -f ./configs/argocd_project.yaml
-    
-      cat ./configs/argocd_application.yaml.template | \
-        sed "s/\${ENV}/$WORKSPACE/g" | \
-        sed "s/\${REGISTRY}/$CONTAINER_REGISTRY_NAME/g" | \
-        sed "s/\${PROJECT_NAME}/$PROJECT_NAMESPACE/g" | \
-        sed "s/\${PROVIDER}/$CLOUD_PROVIDER/g" > ./configs/argocd_application.yaml
-    
-      kubectl apply -f ./configs/argocd_application.yaml
-    
-      PUBLIC_IP_NAME=$(az network public-ip list --resource-group rg-$PROJECT_NAMESPACE-$WORKSPACE-aks --query "[?contains(name, 'kubernetes-')].name" -o tsv)
-      az network public-ip update --resource-group rg-$PROJECT_NAMESPACE-$WORKSPACE-aks --name $PUBLIC_IP_NAME --dns-name $PROJECT_NAMESPACE
-    
-      echo "Azure AKS post-deployment configuration completed successfully."
-    fi
 
 validate:
   stage: validate
@@ -149,31 +134,57 @@ plan:
       terraform: ${TF_ROOT}/plan.json
     expire_in: 1 week
 
+.azure-post-apply: &azure-post-apply
+  image: mcr.microsoft.com/azure-cli:latest
+  stage: apply
+  when: manual
+  needs:
+    - apply
+  rules:
+    - if: '$CLOUD_PROVIDER == "azure"'
+  before_script:
+    - echo "Installing kubectl for Kubernetes post-deployment configuration..."
+    - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    - chmod +x kubectl
+    - mv kubectl /usr/local/bin/
+  script:
+    - echo "Configuring Azure AKS post-deployment..."
+    - az login --service-principal -u $ARM_CLIENT_ID -p $ARM_CLIENT_SECRET --tenant $ARM_TENANT_ID
+    - az aks get-credentials --resource-group rg-$PROJECT_NAMESPACE-$WORKSPACE-aks --name aks-$PROJECT_NAMESPACE-$WORKSPACE
+
+    - echo "Applying Kubernetes configurations..."
+    - kubectl apply -f ${TF_ROOT}/configs/production_issuer.yaml
+    - kubectl apply -f ${TF_ROOT}/configs/argocd_network_policies.yaml
+    - kubectl apply -f ${TF_ROOT}/configs/prometheus_recording_rules.yaml
+    - kubectl apply -f ${TF_ROOT}/configs/prometheus_alerting_rules.yaml
+    - kubectl apply -f ${TF_ROOT}/configs/argocd_project.yaml
+
+    - echo "Generating and applying ArgoCD application from template..."
+    - cat ${TF_ROOT}/configs/argocd_application.yaml.template | \
+      sed "s/\${ENV}/$WORKSPACE/g" | \
+      sed "s/\${REGISTRY}/$CONTAINER_REGISTRY_NAME/g" | \
+      sed "s/\${PROJECT_NAME}/$PROJECT_NAMESPACE/g" | \
+      sed "s/\${PROVIDER}/$CLOUD_PROVIDER/g" > ${TF_ROOT}/configs/argocd_application.yaml
+
+    - kubectl apply -f ${TF_ROOT}/configs/argocd_application.yaml
+
+    - echo "Updating DNS configuration..."
+    - PUBLIC_IP_NAME=$(az network public-ip list --resource-group rg-$PROJECT_NAMESPACE-$WORKSPACE-aks --query "[?contains(name, 'kubernetes-')].name" -o tsv)
+    - az network public-ip update --resource-group rg-$PROJECT_NAMESPACE-$WORKSPACE-aks --name $PUBLIC_IP_NAME --dns-name $PROJECT_NAMESPACE
+
+    - echo "Azure AKS post-deployment configuration completed successfully."
+
 apply:
   stage: apply
   <<: *terraform-cache
   when: manual
   before_script:
     - *configure-environment
-    - |
-      echo "Installing kubectl and cloud provider CLI tools..."
-      apt-get update && apt-get install -y ca-certificates curl apt-transport-https lsb-release gnupg
-      
-      if [ "${CLOUD_PROVIDER}" = "azure" ]; then
-        curl -sL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
-        echo "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/azure-cli.list
-        apt-get update && apt-get install -y azure-cli
-      fi
-      
-      curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-      chmod +x kubectl
-      mv kubectl /usr/local/bin/
     - *initialize-terraform
   script:
     - echo "Applying Terraform infrastructure changes..."
     - terraform apply -auto-approve tfplan
     - echo "Terraform apply completed successfully."
-    - *post-apply-azure
   dependencies:
     - plan
   needs:
@@ -181,6 +192,9 @@ apply:
   environment:
     name: ${WORKSPACE}
     on_stop: destroy
+
+azure_post_deploy:
+  <<: *azure-post-apply
 
 destroy:
   stage: destroy
@@ -190,6 +204,8 @@ destroy:
     - *configure-environment
     - *initialize-terraform
   script:
+    - echo "Planning infrastructure destruction (dry-run)..."
+    - terraform plan -destroy --var-file=./tfvars_files/$WORKSPACE.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME"
     - echo "Executing infrastructure destruction..."
     - terraform destroy -auto-approve --var-file=./tfvars_files/$WORKSPACE.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME"
     - echo "Terraform destroy completed successfully."
