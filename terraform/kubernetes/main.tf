@@ -27,7 +27,6 @@ terraform {
   backend "BACKEND_PLACEHOLDER" {
 
   }
-
 }
 
 provider "azurerm" {
@@ -56,23 +55,14 @@ provider "aws" {
 locals {
   kubernetes_config = {
     host = (
-      var.cloud_provider == "azure" ? data.terraform_remote_state.azure[0].outputs.kubernetes_host :
-        var.cloud_provider == "gcp" ? data.terraform_remote_state.gcp[0].outputs.kubernetes_host :
-          var.cloud_provider == "aws" ? data.terraform_remote_state.aws[0].outputs.eks_cluster_endpoint : null
+      var.cloud_provider == "azure" ? data.terraform_remote_state.azure[0].outputs.kubernetes_host : var.cloud_provider == "gcp" ? data.terraform_remote_state.gcp[0].outputs.kubernetes_host : var.cloud_provider == "aws" ? data.terraform_remote_state.aws[0].outputs.eks_cluster_endpoint : null
     )
 
-    client_certificate = var.cloud_provider == "azure" ?
-      base64decode(data.terraform_remote_state.azure[0].outputs.kubernetes_client_certificate) : null
-    client_key = var.cloud_provider == "azure" ?
-      base64decode(data.terraform_remote_state.azure[0].outputs.kubernetes_client_key) : null
+    client_certificate = var.cloud_provider == "azure" ? base64decode(data.terraform_remote_state.azure[0].outputs.kubernetes_client_certificate) : null
+    client_key = var.cloud_provider == "azure" ? base64decode(data.terraform_remote_state.azure[0].outputs.kubernetes_client_key) : null
 
     cluster_ca_certificate = (
-      var.cloud_provider == "azure" ?
-      base64decode(data.terraform_remote_state.azure[0].outputs.kubernetes_cluster_ca_certificate) :
-        var.cloud_provider == "gcp" ?
-        base64decode(data.terraform_remote_state.gcp[0].outputs.kubernetes_cluster_ca_certificate) :
-          var.cloud_provider == "aws" ?
-          base64decode(data.terraform_remote_state.aws[0].outputs.eks_cluster_certificate_authority_data) : null
+      var.cloud_provider == "azure" ? base64decode(data.terraform_remote_state.azure[0].outputs.kubernetes_cluster_ca_certificate) : var.cloud_provider == "gcp" ? base64decode(data.terraform_remote_state.gcp[0].outputs.kubernetes_cluster_ca_certificate) : var.cloud_provider == "aws" ? base64decode(data.terraform_remote_state.aws[0].outputs.eks_cluster_certificate_authority_data) : null
     )
   }
 }
