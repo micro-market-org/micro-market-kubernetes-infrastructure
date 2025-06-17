@@ -32,7 +32,7 @@ resource "helm_release" "postgresql" {
       postgresql:
         auth:
           username: "postgres"
-          database: ${var.project_name}
+          database: "microservices"
 
     primary:
       persistence:
@@ -78,7 +78,7 @@ output "postgresql_port" {
 
 output "postgresql_database" {
   description = "PostgreSQL database name"
-  value       = var.project_name
+  value       = "microservices"
 }
 
 output "postgresql_username" {

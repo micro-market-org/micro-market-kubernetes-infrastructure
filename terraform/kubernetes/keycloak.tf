@@ -515,7 +515,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm_config" {
           "clientId": "catalog-service",
           "enabled": true,
           "clientAuthenticatorType": "client-secret",
-          "secret": "catalog-service-secret",
+          "secret": "${random_password.catalog_client_secret.result}",
           "redirectUris": [
             "https://catalog.catalog.svc.cluster.local/*",
             "https://${local.current_domain}/*"
@@ -540,7 +540,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm_config" {
           "clientId": "audit-service",
           "enabled": true,
           "clientAuthenticatorType": "client-secret",
-          "secret": "audit-service-secret",
+          "secret": "${random_password.audit_client_secret.result}",
           "redirectUris": [
             "https://audit.microservices.svc.cluster.local/*",
             "https://${local.current_domain}/*"
@@ -550,6 +550,31 @@ resource "kubernetes_config_map_v1" "keycloak_realm_config" {
             "https://${local.current_domain}"
           ],
           "rootUrl": "http://audit-service.microservices.svc.cluster.local",
+          "baseUrl": "/",
+          "publicClient": false,
+          "protocol": "openid-connect",
+          "fullScopeAllowed": true,
+          "directAccessGrantsEnabled": true,
+          "standardFlowEnabled": true,
+          "implicitFlowEnabled": false,
+          "serviceAccountsEnabled": true,
+          "defaultClientScopes": ["web-origins", "profile", "roles", "email"],
+          "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
+        },
+        {
+          "clientId": "orders-service",
+          "enabled": true,
+          "clientAuthenticatorType": "client-secret",
+          "secret": "${random_password.orders_client_secret.result}",
+          "redirectUris": [
+            "https://orders.orders.svc.cluster.local/*",
+            "https://${local.current_domain}/*"
+          ],
+          "webOrigins": [
+            "https://orders.orders.svc.cluster.local",
+            "https://${local.current_domain}"
+          ],
+          "rootUrl": "http://orders-service.orders.svc.cluster.local",
           "baseUrl": "/",
           "publicClient": false,
           "protocol": "openid-connect",
