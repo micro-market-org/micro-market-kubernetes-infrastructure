@@ -1,0 +1,192 @@
+image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
+
+stages:
+  - validate
+  - plan
+  - apply
+
+variables:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_PLUGIN_CACHE_DIR: "$CI_PROJECT_DIR/.terraform.d/plugin-cache"
+  CLOUD_PROVIDER: ${CLOUD_PROVIDER:-azure}
+
+.terraform-cache: &terraform-cache
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-${CLOUD_PROVIDER}
+    paths:
+      - terraform/kubernetes/.terraform
+      - .terraform.d/plugin-cache
+    policy: pull-push
+
+.before_script_common: &before_script_common
+  - 'echo "=== [DEBUG] Cloud provider: ${CLOUD_PROVIDER} ==="'
+  - mkdir -p $TF_PLUGIN_CACHE_DIR
+  - |
+    # Set up workspace based on branch name
+    WORKSPACE=$(echo ${CI_COMMIT_REF_NAME} | tr -cd '[:alnum:]-' | tr '[:upper:]' '[:lower:]')
+    echo "Using workspace: $WORKSPACE"
+
+    # Set up provider-specific environment variables
+    case "${CLOUD_PROVIDER}" in
+      aws)
+        export TF_VAR_aws_access_key=$AWS_ACCESS_KEY_ID
+        export TF_VAR_aws_secret_key=$AWS_SECRET_ACCESS_KEY
+        export TF_VAR_aws_session_token=$AWS_SESSION_TOKEN
+        export TF_VAR_aws_region=${AWS_REGION:-us-east-1}
+        export TF_VAR_cloud_provider="aws"
+        export BACKEND_TYPE="s3"
+        ;;
+      azure)
+        export TF_VAR_client_id=$ARM_CLIENT_ID
+        export TF_VAR_client_secret=$ARM_CLIENT_SECRET
+        export TF_VAR_tenant_id=$ARM_TENANT_ID
+        export TF_VAR_subscription_id=$ARM_SUBSCRIPTION_ID
+        export TF_VAR_cloud_provider="azure"
+        export BACKEND_TYPE="azurerm"
+        ;;
+      gcp)
+        echo "$GCP_SERVICE_ACCOUNT_KEY" > gcp-credentials.json
+        export GOOGLE_APPLICATION_CREDENTIALS="$CI_PROJECT_DIR/gcp-credentials.json"
+        export TF_VAR_gcp_credentials="$CI_PROJECT_DIR/gcp-credentials.json"
+        export TF_VAR_gcp_project=$GCP_PROJECT_ID
+        export TF_VAR_gcp_region=${GCP_REGION:-europe-central2}
+        export TF_VAR_gcp_zone=${GCP_ZONE:-europe-central2-a}
+        export TF_VAR_cloud_provider="gcp"
+        export BACKEND_TYPE="gcs"
+        ;;
+      *)
+        echo "Unsupported cloud provider: ${CLOUD_PROVIDER}. Must be one of: aws, azure, gcp"
+        exit 1
+        ;;
+    esac
+
+validate:
+  stage: validate
+  <<: *terraform-cache
+  before_script:
+    - *before_script_common
+    - cd terraform/kubernetes
+    - sed -i "s/BACKEND_PLACEHOLDER/${BACKEND_TYPE}/g" main.tf
+  script:
+    - |
+      case "${CLOUD_PROVIDER}" in
+        aws)
+          terraform init \
+            -backend-config="bucket=terraform-microservices1691715-state" \
+            -backend-config="key=terraform.tfstate" \
+            -backend-config="region=${TF_VAR_aws_region}" \
+            -backend-config="access_key=${TF_VAR_aws_access_key}" \
+            -backend-config="secret_key=${TF_VAR_aws_secret_key}" \
+            -backend-config="token=${TF_VAR_aws_session_token}"
+          ;;
+        azure)
+          terraform init -backend-config="config.azure.tfbackend"
+          ;;
+        gcp)
+          terraform init \
+            -backend-config="bucket=terraformmicroservicesstate" \
+            -backend-config="prefix=kubernetes/state" \
+            -backend-config="credentials=${TF_VAR_gcp_credentials}"
+          ;;
+      esac
+    - terraform validate
+    - terraform fmt -check -diff
+
+plan:
+  stage: plan
+  <<: *terraform-cache
+  before_script:
+    - *before_script_common
+    - cd terraform/kubernetes
+    - sed -i "s/BACKEND_PLACEHOLDER/${BACKEND_TYPE}/g" main.tf
+  script:
+    - |
+      case "${CLOUD_PROVIDER}" in
+        aws)
+          terraform init \
+            -backend-config="bucket=terraform-microservices1691715-state" \
+            -backend-config="key=terraform.tfstate" \
+            -backend-config="region=${TF_VAR_aws_region}" \
+            -backend-config="access_key=${TF_VAR_aws_access_key}" \
+            -backend-config="secret_key=${TF_VAR_aws_secret_key}" \
+            -backend-config="token=${TF_VAR_aws_session_token}"
+          ;;
+        azure)
+          terraform init -backend-config="config.azure.tfbackend"
+          ;;
+        gcp)
+          terraform init \
+            -backend-config="bucket=terraformmicroservicesstate" \
+            -backend-config="prefix=kubernetes/state" \
+            -backend-config="credentials=${TF_VAR_gcp_credentials}"
+          ;;
+      esac
+    - |
+      if ! terraform workspace list | grep -q "$WORKSPACE"; then
+        terraform workspace new "$WORKSPACE"
+      fi
+      terraform workspace select "$WORKSPACE"
+    - terraform plan --var-file=./tfvars_files/$WORKSPACE.tfvars -var="project_name=microservices1691719" var="environment=$WORKSPACE" var="gitlab_token=$GITLAB_ACCESS_TOKEN" var="gitlab_username=$GITLAB_USERNAME" -out=tfplan
+    - terraform show -json tfplan > plan.json
+  artifacts:
+    paths:
+      - terraform/kubernetes/tfplan
+      - terraform/kubernetes/plan.json
+    reports:
+      terraform: terraform/kubernetes/plan.json
+
+apply:
+  stage: apply
+  <<: *terraform-cache
+  when: manual
+  before_script:
+    - *before_script_common
+    - cd terraform/kubernetes
+    - sed -i "s/BACKEND_PLACEHOLDER/${BACKEND_TYPE}/g" main.tf
+  script:
+    - |
+      case "${CLOUD_PROVIDER}" in
+        aws)
+          terraform init \
+            -backend-config="bucket=terraform-microservices1691715-state" \
+            -backend-config="key=terraform.tfstate" \
+            -backend-config="region=${TF_VAR_aws_region}" \
+            -backend-config="access_key=${TF_VAR_aws_access_key}" \
+            -backend-config="secret_key=${TF_VAR_aws_secret_key}" \
+            -backend-config="token=${TF_VAR_aws_session_token}"
+          ;;
+        azure)
+          terraform init -backend-config="config.azure.tfbackend"
+          ;;
+        gcp)
+          terraform init \
+            -backend-config="bucket=terraformmicroservicesstate" \
+            -backend-config="prefix=kubernetes/state" \
+            -backend-config="credentials=${TF_VAR_gcp_credentials}"
+          ;;
+      esac
+    - |
+      terraform workspace select "$WORKSPACE" || terraform workspace new "$WORKSPACE"
+    - terraform apply -auto-approve tfplan
+    - |
+      if [ "${CLOUD_PROVIDER}" = "azure" ]; then
+        kubectl apply -f ./configs/production_issuer.yaml
+        kubectl apply -f ./configs/argocd_network_policies.yaml
+        kubectl apply -f ./configs/prometheus_recording_rules.yaml
+        kubectl apply -f ./configs/prometheus_alerting_rules.yaml
+        kubectl apply -f ./configs/argocd_project.yaml
+
+        cat ./configs/argocd_application.yaml.template | \
+          sed "s/\${ENV}/$WORKSPACE/g" | \
+          sed "s/\${REGISTRY}/$CONTAINER_REGISTRY_NAME/g" | \
+          sed "s/\${PROVIDER}/$CLOUD_PROVIDER/g" > ./configs/argocd_application.yaml
+
+        kubectl apply -f ./configs/argocd_application.yaml
+
+        PUBLIC_IP_NAME=$(az network public-ip list --resource-group rg-$CI_PROJECT_NAMESPACE-$WORKSPACE-aks --query "[?contains(name, 'kubernetes-')].name" -o tsv)
+        az network public-ip update --resource-group rg-$CI_PROJECT_NAMESPACE-$WORKSPACE-aks --name $PUBLIC_IP_NAME --dns-name $CI_PROJECT_NAMESPACE
+      fi
+  dependencies:
+    - plan
+  needs: [ plan ]

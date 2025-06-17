@@ -1,0 +1,28 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: recording-rules
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+    app: kube-prometheus-stack
+spec:
+  groups:
+  - name: kubernetes-resources
+    interval: 30s
+    rules:
+    - expr: sum(container_memory_usage_bytes{job="kubelet", metrics_path="/metrics/cadvisor", container!=""}) by (namespace)
+      record: namespace:container_memory_usage_bytes:sum
+    - expr: sum(container_spec_cpu_shares{job="kubelet", metrics_path="/metrics/cadvisor", container!=""}) by (namespace)
+      record: namespace:container_cpu_usage:sum
+    - expr: sum(rate(container_cpu_usage_seconds_total{job="kubelet", metrics_path="/metrics/cadvisor", container!=""}[5m])) by (namespace)
+      record: namespace:container_cpu_usage_seconds_total:sum_rate
+  - name: node-exporter
+    interval: 30s
+    rules:
+    - expr: sum(rate(node_cpu_seconds_total{mode!="idle"}[5m])) by (instance) / on(instance) group_left count(node_cpu_seconds_total{mode="idle"}) by (instance)
+      record: instance:node_cpu_utilisation:rate5m
+    - expr: sum(node_memory_MemTotal_bytes) - sum(node_memory_MemFree_bytes + node_memory_Buffers_bytes + node_memory_Cached_bytes)
+      record: cluster:memory_usage_bytes:sum
+    - expr: sum(rate(node_network_receive_bytes_total[5m])) + sum(rate(node_network_transmit_bytes_total[5m]))
+      record: cluster:network_usage_bytes:sum_rate
