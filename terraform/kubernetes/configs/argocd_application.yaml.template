@@ -47,6 +47,14 @@ spec:
               value: '{{registry}}/{{project}}/{{name}}'
             - name: global.domain
               value: '{{project}}.westeurope.cloudapp.azure.com'
+            - name: ingress.hosts[0].host
+              value: '{{project}}.westeurope.cloudapp.azure.com'
+            - name: ingress.tls[0].hosts[0]
+              value: '{{project}}.westeurope.cloudapp.azure.com'
+            - name: configMaps.micro-market-frontend-config.data.NEXT_PUBLIC_KEYCLOAK_URL
+              value: 'https://{{project}}.westeurope.cloudapp.azure.com/auth'
+            - name: configMaps.micro-market-frontend-config.data.NEXT_PUBLIC_API_URL
+              value: 'https://{{project}}.westeurope.cloudapp.azure.com'
       destination:
         server: https://kubernetes.default.svc
         namespace: 'microservices'

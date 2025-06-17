@@ -150,7 +150,7 @@ plan:
   script:
     - echo "Configuring Azure AKS post-deployment..."
     - az login --service-principal -u $ARM_CLIENT_ID -p $ARM_CLIENT_SECRET --tenant $ARM_TENANT_ID
-    - az aks get-credentials --resource-group rg-$PROJECT_NAMESPACE-$WORKSPACE-aks --name aks-$PROJECT_NAMESPACE-$WORKSPACE
+    - az aks get-credentials --resource-group rg-$PROJECT_NAMESPACE-$WORKSPACE --name k8s-$PROJECT_NAMESPACE-$WORKSPACE
 
     - echo "Applying Kubernetes configurations..."
     - kubectl apply -f ${TF_ROOT}/configs/production_issuer.yaml
@@ -193,7 +193,7 @@ apply:
     name: ${WORKSPACE}
     on_stop: destroy
 
-azure_post_deploy:
+azure_post_apply:
   <<: *azure-post-apply
 
 destroy:
