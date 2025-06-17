@@ -127,7 +127,7 @@ plan:
         terraform workspace new "$WORKSPACE"
       fi
       terraform workspace select "$WORKSPACE"
-    - terraform plan --var-file=./tfvars_files/$WORKSPACE.tfvars -var="project_name=microservices1691719" var="environment=$WORKSPACE" var="gitlab_token=$GITLAB_ACCESS_TOKEN" var="gitlab_username=$GITLAB_USERNAME" -out=tfplan
+    - terraform plan --var-file=./tfvars_files/$WORKSPACE.tfvars -var project_name="microservices1691719" -var environment="$WORKSPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME" -out=tfplan
     - terraform show -json tfplan > plan.json
   artifacts:
     paths:
