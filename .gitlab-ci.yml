@@ -81,7 +81,11 @@ validate:
             -backend-config="token=${TF_VAR_aws_session_token}"
           ;;
         azure)
-          terraform init -backend-config="config.azure.tfbackend"
+          terraform init \
+            -backend-config="resource_group_name=rg-infrastructure" \
+            -backend-config="storage_account_name=terraformmicrostate" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=kubernetes.tfstateenv:${$WORKSPACE}"
           ;;
         gcp)
           terraform init \
@@ -113,7 +117,11 @@ plan:
             -backend-config="token=${TF_VAR_aws_session_token}"
           ;;
         azure)
-          terraform init -backend-config="config.azure.tfbackend"
+          terraform init \
+            -backend-config="resource_group_name=rg-infrastructure" \
+            -backend-config="storage_account_name=terraformmicrostate" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=kubernetes.tfstateenv:${$WORKSPACE}"
           ;;
         gcp)
           terraform init \
@@ -157,7 +165,11 @@ apply:
             -backend-config="token=${TF_VAR_aws_session_token}"
           ;;
         azure)
-          terraform init -backend-config="config.azure.tfbackend"
+          terraform init \
+            -backend-config="resource_group_name=rg-infrastructure" \
+            -backend-config="storage_account_name=terraformmicrostate" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=kubernetes.tfstateenv:${$WORKSPACE}"
           ;;
         gcp)
           terraform init \
