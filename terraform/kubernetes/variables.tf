@@ -104,3 +104,10 @@ variable "gitlab_username" {
   type        = string
   default     = ""
 }
+
+variable "database" {
+  description = "Postgres database"
+  type        = string
+  default     = "microservices"
+}
+

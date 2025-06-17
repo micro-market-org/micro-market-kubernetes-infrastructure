@@ -33,7 +33,7 @@ resource "helm_release" "grafana-agent-operator" {
   chart      = "grafana-agent-operator"
   version    = "0.2.14"
   depends_on = [helm_release.cert_manager]
-  timeout    = 600
+  timeout    = 300
 
   set {
     name  = "crds.enabled"
@@ -48,7 +48,7 @@ resource "helm_release" "kube-prometheus" {
   repository = "https://prometheus-community.github.io/helm-charts"
   chart      = "kube-prometheus-stack"
   depends_on = [helm_release.cert_manager, helm_release.grafana-agent-operator]
-  timeout    = 1200
+  timeout    = 600
   values     = [file("${path.root}/configs/kube-prometheus_config.yaml")]
 
   set_sensitive {
@@ -84,10 +84,9 @@ resource "helm_release" "loki" {
   repository = "https://grafana.github.io/helm-charts"
   chart      = "loki"
   depends_on = [helm_release.kube-prometheus, helm_release.grafana-agent-operator]
-  timeout    = 900
+  timeout    = 300
   values     = [file("${path.root}/configs/loki_config.yaml")]
 
-  # Ensure CRDs are installed
   set {
     name  = "crds.create"
     value = "true"
@@ -98,7 +97,16 @@ resource "helm_release" "loki" {
     value = "2023-01-01"
   }
 
-  # Add Loki datasource to Grafana
+  set {
+    name  = "loki.schemaConfig.configs[0].schema"
+    value = "v12"
+  }
+
+  set {
+    name  = "loki.extraArgs"
+    value = "[\"-config.expand-env=true\"]"
+  }
+
   set {
     name  = "grafana.datasources.datasources\\.yaml.apiVersion"
     value = "1"

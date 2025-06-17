@@ -23,7 +23,7 @@ resource "helm_release" "postgresql" {
   create_namespace  = false
   dependency_update = true
   lint              = true
-  timeout           = 600
+  timeout           = 300
   depends_on        = [helm_release.cert_manager, helm_release.kube-prometheus]
 
   values = [
@@ -32,7 +32,7 @@ resource "helm_release" "postgresql" {
       postgresql:
         auth:
           username: "postgres"
-          database: "microservices"
+          database: ${var.database}
 
     primary:
       persistence:
@@ -78,7 +78,7 @@ output "postgresql_port" {
 
 output "postgresql_database" {
   description = "PostgreSQL database name"
-  value       = "microservices"
+  value       = var.database
 }
 
 output "postgresql_username" {

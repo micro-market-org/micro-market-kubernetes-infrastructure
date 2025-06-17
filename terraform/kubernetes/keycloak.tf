@@ -28,7 +28,7 @@ resource "kubernetes_secret_v1" "keycloak_postgresql_secret" {
   data = {
     "POSTGRES_USER"     = "postgres"
     "POSTGRES_PASSWORD" = random_password.postgresql_password.result
-    "POSTGRES_DB"       = var.project_name
+    "POSTGRES_DB"       = var.database
     "POSTGRES_HOST"     = "postgresql.postgresql.svc.cluster.local"
     "POSTGRES_PORT"     = "5432"
   }
@@ -53,7 +53,7 @@ resource "helm_release" "keycloak" {
   namespace         = kubernetes_namespace_v1.keycloak.metadata[0].name
   create_namespace  = false
   dependency_update = true
-  timeout           = 900
+  timeout           = 300
 
   depends_on = [
     kubernetes_namespace_v1.keycloak,
@@ -150,7 +150,7 @@ resource "helm_release" "keycloak" {
       host: postgresql.postgresql.svc.cluster.local
       port: 5432
       user: postgres
-      database: ${var.project_name}
+      database: ${var.database}
       existingSecret: keycloak-postgresql
       existingSecretPasswordKey: POSTGRES_PASSWORD
 
