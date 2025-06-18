@@ -1,10 +1,23 @@
 config:
   clients:
     - url: http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push
+      tenant_id: "promtail"
+      batchwait: 1s
+      batchsize: 1048576  # 1MB
+      backoff_config:
+        min_period: 500ms
+        max_period: 5m
+        max_retries: 10
+      timeout: 10s
+      external_labels:
+        cluster: ${CLUSTER_NAME}
+        environment: ${CLUSTER_NAME}
 
   snippets:
     pipelineStages:
-      - cri: { }
+      - cri: 
+          max_partial_lines: 100
+          max_partial_line_size: 262144
       - json:
           expressions:
             level: level
@@ -13,44 +26,123 @@ config:
             logger: logger
             thread: thread
             service: service
+            traceID: traceID
+            spanID: spanID
+            error: error
+            exception: exception
       - labels:
           level:
           service:
+          traceID:
+          spanID:
       - timestamp:
           source: timestamp
           format: RFC3339Nano
+          fallback_formats:
+            - RFC3339
+            - Unix
+            - UnixMs
+      - metrics:
+          log_entries_count:
+            type: Counter
+            description: "Count of log entries by level and service"
+            prefix: promtail_custom_
+            source: level
+            config:
+              action: inc
+              match_all: true
+              labels:
+                level: "level"
+                service: "service"
+      - template:
+          source: message
+          template: '{{ if .error }}{{ .message }} - Error: {{ .error }}{{ else if .exception }}{{ .message }} - Exception: {{ .exception }}{{ else }}{{ .message }}{{ end }}'
       - output:
           source: message
 
 serviceMonitor:
   enabled: true
   namespace: monitoring
-  interval: 15s
+  interval: 10s
+  scrapeTimeout: 5s
+  relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_node_name]
+      targetLabel: node_name
+    - sourceLabels: [__meta_kubernetes_namespace]
+      targetLabel: namespace
 
 resources:
   requests:
     cpu: 50m
     memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: http-metrics
+  initialDelaySeconds: 10
+  timeoutSeconds: 1
+
+livenessProbe:
+  httpGet:
+    path: /ready
+    port: http-metrics
+  initialDelaySeconds: 45
+  timeoutSeconds: 1
 
 tolerations:
   - effect: NoSchedule
     operator: Exists
-
-extraArgs:
-  - -config.expand-env=true
+  - key: "node-role.kubernetes.io/master"
+    operator: "Exists"
+    effect: "NoSchedule"
 
 extraEnv:
   - name: HOSTNAME
     valueFrom:
       fieldRef:
         fieldPath: spec.nodeName
+  - name: CLUSTER_NAME
+    value: "production"
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "3101"
+
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
 
 serviceAccount:
   create: true
   name: promtail
+  annotations:
+    prometheus.io/scrape: "true"
 
 namespaceSelectorStrategy: selection
 namespaceSelector:
   matchNames:
     - microservices
     - monitoring
+    - kube-system
+    - default
+    - ingress-nginx
+
+securityContext:
+  readOnlyRootFilesystem: true
+  runAsGroup: 1000
+  runAsUser: 1000
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/os
+          operator: In
+          values:
+          - linux

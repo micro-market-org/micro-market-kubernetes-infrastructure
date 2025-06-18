@@ -1,13 +1,15 @@
 prometheus:
   prometheusSpec:
-    retention: "7d"
-    evaluationInterval: "60s"
-    scrapeInterval: "60s"
+    retention: "15d"
+    evaluationInterval: "30s"
+    scrapeInterval: "30s"
     serviceMonitorSelectorNilUsesHelmValues: false
     serviceMonitorSelector: {}
     podMonitorSelectorNilUsesHelmValues: false
     podMonitorSelector: {}
     walCompression: true
+    enableAdminAPI: false
+    externalUrl: /prometheus
     storageSpec:
       volumeClaimTemplate:
         spec:
@@ -15,12 +17,27 @@ prometheus:
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:
-              storage: 5Gi
+              storage: 10Gi
     resources:
       requests:
-        memory: "256Mi"
-        cpu: "100m"
-    replicas: 1
+        memory: "512Mi"
+        cpu: "200m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+    replicas: 2
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - prometheus
+            topologyKey: kubernetes.io/hostname
 
 alertmanager:
   enabled: true
@@ -32,31 +49,43 @@ alertmanager:
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:
-              storage: 1Gi
+              storage: 2Gi
     resources:
       requests:
-        memory: "64Mi"
-        cpu: "50m"
-    replicas: 1
-    retention: 72h
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    replicas: 2
+    retention: 120h
+    podAntiAffinity: "soft"
   config:
     global:
       resolve_timeout: 5m
+      smtp_from: "alertmanager@monitoring.local"
+      smtp_smarthost: "smtp.gmail.com:587"
+      smtp_require_tls: true
     route:
       group_by: ['alertname', 'job', 'severity']
       group_wait: 30s
       group_interval: 5m
       repeat_interval: 12h
-      receiver: 'slack-notifications'
+      receiver: 'email-notifications'
       routes:
         - match:
             severity: critical
-          receiver: 'slack-notifications'
+          receiver: 'all-notifications'
           continue: true
         - match:
             severity: warning
-          receiver: 'slack-notifications'
+          receiver: 'all-notifications'
           group_wait: 1m
+          continue: true
+        - match:
+            severity: info
+          receiver: 'email-notifications'
+          group_wait: 2m
           continue: true
     inhibit_rules:
       - source_match:
@@ -64,7 +93,35 @@ alertmanager:
         target_match:
           severity: 'warning'
         equal: ['alertname', 'namespace']
+      - source_match:
+          severity: 'warning'
+        target_match:
+          severity: 'info'
+        equal: ['alertname', 'namespace']
     receivers:
+      - name: 'email-notifications'
+        email_configs:
+          - to: 'daniel-adrian.gherasim@student.tuiasi.ro'
+            send_resolved: true
+            html: |
+              {{ if eq .Status "firing" }}
+                <h1>🔥 {{ .Alerts.Firing | len }} Alert{{ if gt (len .Alerts.Firing) 1 }}s{{ end }} Firing</h1>
+              {{ end }}
+              {{ if eq .Status "resolved" }}
+                <h1>✅ {{ .Alerts.Resolved | len }} Alert{{ if gt (len .Alerts.Resolved) 1 }}s{{ end }} Resolved</h1>
+              {{ end }}
+
+              <table>
+                <tr><th>Alert</th><th>Summary</th><th>Description</th><th>Severity</th></tr>
+                {{ range .Alerts }}
+                  <tr>
+                    <td>{{ .Labels.alertname }}</td>
+                    <td>{{ .Annotations.summary }}</td>
+                    <td>{{ .Annotations.description }}</td>
+                    <td>{{ .Labels.severity }}</td>
+                  </tr>
+                {{ end }}
+              </table>
       - name: 'slack-notifications'
         slack_configs:
           - channel: '#alerts'
@@ -79,22 +136,91 @@ alertmanager:
                 {{ range .Labels.SortedPairs }} • *{{ .Name }}:* `{{ .Value }}`
                 {{ end }}
               {{ end }}
+      - name: 'all-notifications'
+        slack_configs:
+          - channel: '#alerts'
+            send_resolved: true
+            title: '[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}'
+            text: >-
+              {{ range .Alerts }}
+                *Alert:* {{ .Annotations.summary }}
+                *Description:* {{ .Annotations.description }}
+                *Severity:* {{ .Labels.severity }}
+                *Details:*
+                {{ range .Labels.SortedPairs }} • *{{ .Name }}:* `{{ .Value }}`
+                {{ end }}
+              {{ end }}
+        email_configs:
+          - to: 'daniel-adrian.gherasim@student.tuiasi.ro'
+            send_resolved: true
+            html: |
+              {{ if eq .Status "firing" }}
+                <h1>🔥 {{ .Alerts.Firing | len }} Alert{{ if gt (len .Alerts.Firing) 1 }}s{{ end }} Firing</h1>
+              {{ end }}
+              {{ if eq .Status "resolved" }}
+                <h1>✅ {{ .Alerts.Resolved | len }} Alert{{ if gt (len .Alerts.Resolved) 1 }}s{{ end }} Resolved</h1>
+              {{ end }}
+
+              <table>
+                <tr><th>Alert</th><th>Summary</th><th>Description</th><th>Severity</th></tr>
+                {{ range .Alerts }}
+                  <tr>
+                    <td>{{ .Labels.alertname }}</td>
+                    <td>{{ .Annotations.summary }}</td>
+                    <td>{{ .Annotations.description }}</td>
+                    <td>{{ .Labels.severity }}</td>
+                  </tr>
+                {{ end }}
+              </table>
 
 grafana:
+  replicas: 2
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "200m"
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+              - grafana
+          topologyKey: kubernetes.io/hostname
   grafana.ini:
     server:
       serve_from_sub_path: true
+      domain: ${DOMAIN}
+      root_url: https://${DOMAIN}/grafana
     auth:
       disable_login_form: false
       oauth_auto_login: false
+      login_maximum_inactive_lifetime_duration: 7d
+      login_maximum_lifetime_duration: 30d
     security:
       cookie_secure: true
+      disable_gravatar: true
+      content_security_policy: true
+      strict_transport_security: true
+      strict_transport_security_max_age_seconds: 31536000
+      strict_transport_security_preload: true
+      strict_transport_security_subdomains: true
+      x_content_type_options: true
+      x_xss_protection: true
     users:
       allow_sign_up: false
       auto_assign_org: true
       auto_assign_org_role: Viewer
     analytics:
       reporting_enabled: false
+      check_for_updates: false
     auth.generic_oauth:
       enabled: true
       name: Keycloak
@@ -106,10 +232,28 @@ grafana:
       token_url: https://${DOMAIN}/auth/realms/microservices/protocol/openid-connect/token
       api_url: https://${DOMAIN}/auth/realms/microservices/protocol/openid-connect/userinfo
       role_attribute_path: contains(roles[*], 'admin') && 'Admin' || contains(roles[*], 'editor') && 'Editor' || 'Viewer'
+    unified_alerting:
+      enabled: true
+    alerting:
+      enabled: false
+    metrics:
+      enabled: true
+    database:
+      wal: true
+    log:
+      mode: console
+      level: info
+    smtp:
+      enabled: true
+      host: smtp.gmail.com:587
+      user: alertmanager@monitoring.local
+      from_address: alertmanager@monitoring.local
+      from_name: Grafana Alert
+      startTLS_policy: MandatoryStartTLS
   persistence:
     enabled: true
     storageClassName: "managed-csi"
-    size: 1Gi
+    size: 5Gi
   dashboardProviders:
     dashboardproviders.yaml:
       apiVersion: 1
@@ -130,27 +274,48 @@ grafana:
           editable: true
           options:
             path: /var/lib/grafana/dashboards/kubernetes
+        - name: 'monitoring'
+          orgId: 1
+          folder: 'Monitoring'
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/monitoring
   dashboards:
     default:
       kubernetes-cluster:
-        gnetId: 7249
+        gnetId: 19329
         revision: 1
         datasource: Prometheus
       node-exporter:
-        gnetId: 1860
-        revision: 27
+        gnetId: 19004
+        revision: 1
         datasource: Prometheus
       microservices-logs:
         file: /var/lib/grafana/dashboards/default/microservices-logs.json
     kubernetes:
       k8s-views-global:
-        gnetId: 15757
+        gnetId: 19401
         revision: 1
         datasource: Prometheus
       k8s-views-pods:
-        gnetId: 15760
+        gnetId: 19400
         revision: 1
         datasource: Prometheus
+    monitoring:
+      prometheus-stats:
+        gnetId: 19105
+        revision: 1
+        datasource: Prometheus
+      alertmanager:
+        gnetId: 19313
+        revision: 1
+        datasource: Prometheus
+      loki-logs:
+        gnetId: 18281
+        revision: 1
+        datasource: Loki
 
 defaultRules:
   create: true

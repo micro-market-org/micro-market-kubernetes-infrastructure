@@ -19,6 +19,16 @@ resource "random_password" "grafana_oidc_client_secret" {
   special = false
 }
 
+resource "random_password" "client_user_password" {
+  length  = 16
+  special = false
+}
+
+resource "random_password" "administrator_user_password" {
+  length  = 16
+  special = false
+}
+
 resource "kubernetes_secret_v1" "keycloak_postgresql_secret" {
   metadata {
     name      = "keycloak-postgresql"
@@ -460,7 +470,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm_config" {
           "credentials": [
             {
               "type": "password",
-              "value": "client",
+              "value": "${random_password.client_user_password.result}",
               "temporary": false
             }
           ],
@@ -474,12 +484,12 @@ resource "kubernetes_config_map_v1" "keycloak_realm_config" {
           "emailVerified": true,
           "firstName": "Administrator",
           "lastName": "User",
-          "email": "admininistrator@microservice.com",
+          "email": "administrator@microservice.com",
           "createdTimestamp": 1625097600000,
           "credentials": [
             {
               "type": "password",
-              "value": "admininistrator",
+              "value": "${random_password.administrator_user_password.result}",
               "temporary": false
             }
           ],
@@ -693,5 +703,17 @@ output "keycloak_admin_username" {
 output "keycloak_admin_password" {
   description = "Keycloak admin password"
   value       = random_password.keycloak_admin_password.result
+  sensitive   = true
+}
+
+output "keycloak_client_user_password" {
+  description = "Keycloak client user password"
+  value       = random_password.client_user_password.result
+  sensitive   = true
+}
+
+output "keycloak_administrator_user_password" {
+  description = "Keycloak administrator user password"
+  value       = random_password.administrator_user_password.result
   sensitive   = true
 }

@@ -1,3 +1,5 @@
+deploymentMode: "SingleBinary"
+
 loki:
   auth_enabled: false
   storage:
@@ -16,17 +18,51 @@ loki:
       active_index_directory: /var/loki/index
       cache_location: /var/loki/cache
       cache_ttl: 24h
-      shared_store: filesystem
+      resync_interval: 5m
     filesystem:
       directory: /var/loki/chunks
   commonConfig:
     replication_factor: 1
     path_prefix: /var/loki
+    ring:
+      kvstore:
+        store: inmemory
   compactor:
-    shared_store: filesystem
     working_directory: /var/loki/compactor
+    compaction_interval: 10m
+    retention_enabled: true
+    retention_delete_delay: 2h
+    retention_delete_worker_count: 150
+    delete_request_store:
+      type: filesystem
+      filesystem:
+        directory: /var/loki/delete-requests
   limits_config:
-    retention_period: 7d
+    retention_period: 15d
+    reject_old_samples: true
+    reject_old_samples_max_age: 168h  # 7d
+    ingestion_rate_mb: 10
+    ingestion_burst_size_mb: 20
+    per_stream_rate_limit: 5MB
+    per_stream_rate_limit_burst: 10MB
+    max_entries_limit_per_query: 10000
+    max_query_series: 1000
+    max_query_lookback: 168h  # 7d
+    max_cache_freshness_per_query: 10m
+    split_queries_by_interval: 15m
+  frontend:
+    compress_responses: true
+    log_queries_longer_than: 10s
+    downstream_url: http://127.0.0.1:3100
+  query_range:
+    align_queries_with_step: true
+    cache_results: true
+    results_cache:
+      cache:
+        enable_fifocache: true
+        fifocache:
+          max_size_items: 1024
+          validity: 24h
   ruler:
     storage:
       type: local
@@ -38,40 +74,124 @@ loki:
       kvstore:
         store: inmemory
     enable_api: true
+    enable_alertmanager_v2: true
+    evaluation_interval: 1m
 
 singleBinary:
   replicas: 1
+  persistence:
+    enabled: true
+    storageClassName: managed-csi
+    size: 10Gi
+    accessModes:
+      - ReadWriteOnce
   resources:
     requests:
-      cpu: 100m
-      memory: 256Mi
-  extraVolumeMounts:
-    - name: storage
-      mountPath: /var/loki/chunks
-    - name: storage
-      mountPath: /var/loki/compactor
-    - name: storage
-      mountPath: /var/loki/index
-    - name: storage
-      mountPath: /var/loki/cache
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  securityContext:
+    fsGroup: 10001
+    runAsGroup: 10001
+    runAsNonRoot: true
+    runAsUser: 10001
+  initContainers:
+    - name: init-directories
+      image: busybox:1.36.1
+      command:
+        - sh
+        - -c
+        - "mkdir -p /var/loki/index /var/loki/chunks /var/loki/compactor /var/loki/cache /var/loki/delete-requests"
+      volumeMounts:
+        - name: storage
+          mountPath: /var/loki
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        runAsNonRoot: true
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: http-metrics
+    initialDelaySeconds: 30
+    timeoutSeconds: 1
+    periodSeconds: 10
+    successThreshold: 1
+    failureThreshold: 3
+  livenessProbe:
+    httpGet:
+      path: /ready
+      port: http-metrics
+    initialDelaySeconds: 300
+    timeoutSeconds: 1
+    periodSeconds: 30
+    successThreshold: 1
+    failureThreshold: 3
+
+  startupProbe:
+    httpGet:
+      path: /ready
+      port: http-metrics
+    initialDelaySeconds: 60
+    timeoutSeconds: 1
+    periodSeconds: 15
+    successThreshold: 1
+    failureThreshold: 10
+
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+            - key: app
+              operator: In
+              values:
+              - loki
+          topologyKey: kubernetes.io/hostname
 
 monitoring:
   selfMonitoring:
     enabled: true
     grafanaAgent:
       installOperator: false
+  lokiCanary:
+    enabled: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  serviceMonitor:
+    enabled: true
+    interval: 15s
+    scrapeTimeout: 10s
+    relabelings:
+      - sourceLabels: [__meta_kubernetes_pod_name]
+        targetLabel: pod
+      - sourceLabels: [__meta_kubernetes_namespace]
+        targetLabel: namespace
+  dashboards:
+    enabled: true
+    labels:
+      grafana_dashboard: "1"
 
 serviceAccount:
   create: true
   name: loki
-
-persistence:
-  enabled: true
-  storageClassName: "managed-csi"
-  size: 5Gi
+  annotations:
+    prometheus.io/scrape: "true"
 
 service:
   type: ClusterIP
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "3100"
 
 gateway:
   enabled: true
@@ -80,3 +200,53 @@ gateway:
     requests:
       cpu: 50m
       memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: http
+    initialDelaySeconds: 15
+    timeoutSeconds: 1
+    periodSeconds: 10
+    successThreshold: 1
+    failureThreshold: 3
+  livenessProbe:
+    httpGet:
+      path: /ready
+      port: http
+    initialDelaySeconds: 30
+    timeoutSeconds: 1
+    periodSeconds: 10
+    successThreshold: 1
+    failureThreshold: 3
+  ingress:
+    enabled: false
+  basicAuth:
+    enabled: false
+  nginxConfig:
+    file: |
+      server {
+        listen             8080;
+
+        location = / {
+          return 200 'OK';
+          auth_basic off;
+        }
+
+        location = /ready {
+          return 200 'Ready';
+          auth_basic off;
+        }
+
+        location = /metrics {
+          proxy_pass       http://localhost:3100/metrics;
+          auth_basic off;
+        }
+
+        location ~ /(api|loki/api|prometheus)/ {
+          proxy_pass       http://localhost:3100$request_uri;
+        }
+      }

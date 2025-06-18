@@ -134,7 +134,26 @@ plan:
       terraform: ${TF_ROOT}/plan.json
     expire_in: 1 week
 
-.azure-post-apply: &azure-post-apply
+apply:
+  stage: apply
+  <<: *terraform-cache
+  when: manual
+  before_script:
+    - *configure-environment
+    - *initialize-terraform
+  script:
+    - echo "Applying Terraform infrastructure changes..."
+    - terraform apply -auto-approve tfplan
+    - echo "Terraform apply completed successfully."
+  dependencies:
+    - plan
+  needs:
+    - plan
+  environment:
+    name: ${WORKSPACE}
+    on_stop: destroy
+
+azure_post_apply:
   image: mcr.microsoft.com/azure-cli:latest
   stage: apply
   when: manual
@@ -143,10 +162,13 @@ plan:
   rules:
     - if: '$CLOUD_PROVIDER == "azure"'
   before_script:
+    - apk add --no-cache curl bash sed kubectl
     - echo "Installing kubectl for Kubernetes post-deployment configuration..."
     - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
     - chmod +x kubectl
     - mv kubectl /usr/local/bin/
+    - WORKSPACE=$(echo ${CI_COMMIT_REF_NAME} | tr -cd '[:alnum:]-' | tr '[:upper:]' '[:lower:]')
+    - echo "Using workspace: $WORKSPACE"
   script:
     - echo "Configuring Azure AKS post-deployment..."
     - az login --service-principal -u $ARM_CLIENT_ID -p $ARM_CLIENT_SECRET --tenant $ARM_TENANT_ID
@@ -173,28 +195,6 @@ plan:
     - az network public-ip update --resource-group rg-$PROJECT_NAMESPACE-$WORKSPACE-aks --name $PUBLIC_IP_NAME --dns-name $PROJECT_NAMESPACE
 
     - echo "Azure AKS post-deployment configuration completed successfully."
-
-apply:
-  stage: apply
-  <<: *terraform-cache
-  when: manual
-  before_script:
-    - *configure-environment
-    - *initialize-terraform
-  script:
-    - echo "Applying Terraform infrastructure changes..."
-    - terraform apply -auto-approve tfplan
-    - echo "Terraform apply completed successfully."
-  dependencies:
-    - plan
-  needs:
-    - plan
-  environment:
-    name: ${WORKSPACE}
-    on_stop: destroy
-
-azure_post_apply:
-  <<: *azure-post-apply
 
 destroy:
   stage: destroy

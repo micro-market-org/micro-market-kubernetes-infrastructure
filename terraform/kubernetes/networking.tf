@@ -15,91 +15,152 @@ resource "helm_release" "cert_manager" {
   version          = "v1.17.2"
   namespace        = kubernetes_namespace_v1.nginx.metadata[0].name
   create_namespace = true
+  timeout          = 300
+  depends_on       = [helm_release.kube-prometheus]
 
-  set {
-    name  = "crds.enabled"
-    value = "true"
-  }
+  values = [
+    yamlencode({
+      installCRDs = true
+      replicaCount = var.cert_manager_replicas
 
-  set {
-    name  = "webhook.securePort"
-    value = "10250"
-  }
+      webhook = {
+        replicaCount = var.cert_manager_webhook_replicas
+        securePort = 10250
+        hostNetwork = false
+        securityContext = {
+          enabled = true
+        }
+        extraArgs = ["--v=5"]
+        timeoutSeconds = 30
+        resources = {
+          requests = {
+            cpu = var.cert_manager_webhook_resources_requests_cpu
+            memory = var.cert_manager_webhook_resources_requests_memory
+          }
+          limits = {
+            cpu = var.cert_manager_webhook_resources_limits_cpu
+            memory = var.cert_manager_webhook_resources_limits_memory
+          }
+        }
+        affinity = {
+          podAntiAffinity = {
+            preferredDuringSchedulingIgnoredDuringExecution = [
+              {
+                weight = 100
+                podAffinityTerm = {
+                  labelSelector = {
+                    matchExpressions = [
+                      {
+                        key = "app.kubernetes.io/name"
+                        operator = "In"
+                        values = ["webhook"]
+                      }
+                    ]
+                  }
+                  topologyKey = "kubernetes.io/hostname"
+                }
+              }
+            ]
+          }
+        }
+      }
 
-  set {
-    name  = "cainjector.enabled"
-    value = "true"
-  }
+      cainjector = {
+        replicaCount = var.cert_manager_cainjector_replicas
+        enabled = true
+        resources = {
+          requests = {
+            cpu = var.cert_manager_cainjector_resources_requests_cpu
+            memory = var.cert_manager_cainjector_resources_requests_memory
+          }
+          limits = {
+            cpu = var.cert_manager_cainjector_resources_limits_cpu
+            memory = var.cert_manager_cainjector_resources_limits_memory
+          }
+        }
+        affinity = {
+          podAntiAffinity = {
+            preferredDuringSchedulingIgnoredDuringExecution = [
+              {
+                weight = 100
+                podAffinityTerm = {
+                  labelSelector = {
+                    matchExpressions = [
+                      {
+                        key = "app.kubernetes.io/name"
+                        operator = "In"
+                        values = ["cainjector"]
+                      }
+                    ]
+                  }
+                  topologyKey = "kubernetes.io/hostname"
+                }
+              }
+            ]
+          }
+        }
+      }
 
-  set {
-    name  = "startupapicheck.timeout"
-    value = "5m"
-  }
+      startupapicheck = {
+        timeout = "5m"
+        enabled = false
+      }
 
-  set {
-    name  = "webhook.hostNetwork"
-    value = "false"
-  }
+      ingressShim = {
+        defaultIssuerName = var.cluster_issuer
+        defaultIssuerKind = "ClusterIssuer"
+      }
 
-  set {
-    name  = "webhook.securityContext.enabled"
-    value = "true"
-  }
+      prometheus = {
+        enabled = true
+        servicemonitor = {
+          enabled = true
+          prometheusInstance = "kube-prometheus-stack"
+          interval = "30s"
+          scrapeTimeout = "10s"
+        }
+      }
 
-  set {
-    name  = "startupapicheck.enabled"
-    value = "false"
-  }
+      resources = {
+        requests = {
+          cpu = var.cert_manager_resources_requests_cpu
+          memory = var.cert_manager_resources_requests_memory
+        }
+        limits = {
+          cpu = var.cert_manager_resources_limits_cpu
+          memory = var.cert_manager_resources_limits_memory
+        }
+      }
 
-  set {
-    name  = "webhook.extraArgs"
-    value = "{--v=5}"
-  }
+      affinity = {
+        podAntiAffinity = {
+          preferredDuringSchedulingIgnoredDuringExecution = [
+            {
+              weight = 100
+              podAffinityTerm = {
+                labelSelector = {
+                  matchExpressions = [
+                    {
+                      key = "app.kubernetes.io/name"
+                      operator = "In"
+                      values = ["cert-manager"]
+                    }
+                  ]
+                }
+                topologyKey = "kubernetes.io/hostname"
+              }
+            }
+          ]
+        }
+      }
 
-  set {
-    name  = "webhook.timeoutSeconds"
-    value = "30"
-  }
-
-  set {
-    name  = "webhook.timeoutSeconds"
-    value = "30"
-  }
-
-  set {
-    name  = "webhook.securePort"
-    value = "10250"
-  }
-
-  set {
-    name  = "ingressShim.defaultIssuerName"
-    value = var.cluster_issuer
-  }
-
-  set {
-    name  = "ingressShim.defaultIssuerKind"
-    value = "ClusterIssuer"
-  }
-
-  set {
-    name  = "resources.requests.cpu"
-    value = "100m"
-  }
-
-  set {
-    name  = "resources.requests.memory"
-    value = "128Mi"
-  }
-
-  set {
-    name  = "resources.limits.cpu"
-    value = "200m"
-  }
-
-  set {
-    name  = "resources.limits.memory"
-    value = "256Mi"
-  }
+      podAnnotations = {
+        "prometheus.io/scrape" = "true"
+        "prometheus.io/path" = "/metrics"
+        "prometheus.io/port" = "9402"
+      }
+    })
+  ]
 }
 
 resource "helm_release" "nginx-ingress" {
@@ -112,7 +173,14 @@ resource "helm_release" "nginx-ingress" {
   values = [
     yamlencode({
       controller = {
-        replicaCount = 1
+        replicaCount = var.nginx_ingress_replicas
+        autoscaling = {
+          enabled                           = var.nginx_ingress_autoscaling_enabled
+          minReplicas                       = var.nginx_ingress_min_replicas
+          maxReplicas                       = var.nginx_ingress_max_replicas
+          targetCPUUtilizationPercentage    = 80
+          targetMemoryUtilizationPercentage = 80
+        }
         admissionWebhooks = {
           certManager = {
             enabled = true
@@ -141,15 +209,41 @@ resource "helm_release" "nginx-ingress" {
           "hsts"                    = "true"
           "hsts-max-age"            = "31536000"
           "hsts-include-subdomains" = "true"
+          "keep-alive"              = "75"
+          "keep-alive-requests"     = "100"
+          "upstream-keepalive-connections" = "200"
+          "upstream-keepalive-timeout"     = "60"
+          "use-forwarded-headers"   = "true"
         }
         resources = {
           requests = {
-            cpu    = "200m"
-            memory = "256Mi"
+            cpu    = var.nginx_ingress_resources_requests_cpu
+            memory = var.nginx_ingress_resources_requests_memory
           }
           limits = {
-            cpu    = "500m"
-            memory = "512Mi"
+            cpu    = var.nginx_ingress_resources_limits_cpu
+            memory = var.nginx_ingress_resources_limits_memory
+          }
+        }
+        affinity = {
+          podAntiAffinity = {
+            preferredDuringSchedulingIgnoredDuringExecution = [
+              {
+                weight = 100
+                podAffinityTerm = {
+                  labelSelector = {
+                    matchExpressions = [
+                      {
+                        key      = "app.kubernetes.io/name"
+                        operator = "In"
+                        values   = ["ingress-nginx"]
+                      }
+                    ]
+                  }
+                  topologyKey = "kubernetes.io/hostname"
+                }
+              }
+            ]
           }
         }
       }
@@ -169,6 +263,9 @@ resource "kubernetes_ingress_v1" "ingress_grafana" {
       "nginx.ingress.kubernetes.io/proxy-body-size"    = "20m"
       "acme.cert-manager.io/http01-edit-in-place"      = "true"
       "nginx.ingress.kubernetes.io/force-ssl-redirect" = "true"
+      "nginx.ingress.kubernetes.io/ssl-redirect"       = "true"
+      "nginx.ingress.kubernetes.io/backend-protocol"   = "HTTP"
+      "nginx.ingress.kubernetes.io/use-forwarded-headers" = "true"
     }
   }
   depends_on = [helm_release.nginx-ingress, helm_release.cert_manager, helm_release.kube-prometheus]

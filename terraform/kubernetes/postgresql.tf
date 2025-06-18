@@ -23,7 +23,7 @@ resource "helm_release" "postgresql" {
   create_namespace  = false
   dependency_update = true
   lint              = true
-  timeout           = 300
+  timeout           = 600
   depends_on        = [helm_release.cert_manager, helm_release.kube-prometheus]
 
   values = [
@@ -34,24 +34,86 @@ resource "helm_release" "postgresql" {
           username: "postgres"
           database: ${var.database}
 
+    architecture: ${var.postgresql_architecture}
+
     primary:
       persistence:
         enabled: true
-        size: 10Gi
+        size: ${var.postgresql_primary_storage_size}
+        storageClass: "managed-csi"
 
       resources:
         requests:
-          memory: "256Mi"
-          cpu: "250m"
+          memory: ${var.postgresql_primary_resources_requests_memory}
+          cpu: ${var.postgresql_primary_resources_requests_cpu}
         limits:
-          memory: "1Gi"
-          cpu: "1000m"
+          memory: ${var.postgresql_primary_resources_limits_memory}
+          cpu: ${var.postgresql_primary_resources_limits_cpu}
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: postgresql
+                  app.kubernetes.io/instance: postgresql
+              topologyKey: kubernetes.io/hostname
+
+      podAnnotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9187"
+
+      extraEnvVars:
+        - name: POSTGRESQL_MAX_CONNECTIONS
+          value: "${var.postgresql_max_connections}"
+        - name: POSTGRESQL_SHARED_BUFFERS
+          value: "${var.postgresql_shared_buffers}"
+
+    readReplicas:
+      replicaCount: ${var.postgresql_read_replicas_count}
+      persistence:
+        enabled: true
+        size: ${var.postgresql_read_replicas_storage_size}
+        storageClass: "managed-csi"
+
+      resources:
+        requests:
+          memory: ${var.postgresql_read_replicas_resources_requests_memory}
+          cpu: ${var.postgresql_read_replicas_resources_requests_cpu}
+        limits:
+          memory: ${var.postgresql_read_replicas_resources_limits_memory}
+          cpu: ${var.postgresql_read_replicas_resources_limits_cpu}
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: postgresql
+                  app.kubernetes.io/instance: postgresql
+              topologyKey: kubernetes.io/hostname
+
+      podAnnotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9187"
 
     metrics:
       enabled: true
       serviceMonitor:
         enabled: true
         namespace: "monitoring"
+        interval: "30s"
+      resources:
+        requests:
+          memory: "32Mi"
+          cpu: "50m"
+        limits:
+          memory: "64Mi"
+          cpu: "100m"
     EOT
   ]
 
