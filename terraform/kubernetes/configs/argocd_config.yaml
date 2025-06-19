@@ -7,8 +7,8 @@ redis:
   enabled: true
   resources:
     requests:
-      cpu: 50m
-      memory: 64Mi
+      cpu: 40m
+      memory: 50Mi
   externalConfig: false
   existingSecret: false
   createSecret: true
@@ -143,8 +143,8 @@ server:
   replicas: 1
   resources:
     requests:
-      cpu: 100m
-      memory: 128Mi
+      cpu: 80m
+      memory: 100Mi
   certificate:
     enabled: true
     issuer:
@@ -175,8 +175,8 @@ controller:
   replicas: 1
   resources:
     requests:
-      cpu: 100m
-      memory: 128Mi
+      cpu: 80m
+      memory: 100Mi
   dynamicClusterDistribution: false
   heartbeatTime: 10
 
@@ -184,8 +184,8 @@ repoServer:
   replicas: 1
   resources:
     requests:
-      cpu: 50m
-      memory: 64Mi
+      cpu: 40m
+      memory: 50Mi
   containerPorts:
     server: 8081
     metrics: 8084
@@ -194,8 +194,8 @@ applicationSet:
   replicas: 1
   resources:
     requests:
-      cpu: 50m
-      memory: 64Mi
+      cpu: 40m
+      memory: 50Mi
   metrics:
     enabled: false
   containerPorts:
@@ -207,8 +207,8 @@ notifications:
   enabled: true
   resources:
     requests:
-      cpu: 50m
-      memory: 64Mi
+      cpu: 40m
+      memory: 50Mi
 
 dex:
   enabled: false

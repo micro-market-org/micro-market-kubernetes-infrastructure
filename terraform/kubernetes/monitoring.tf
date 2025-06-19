@@ -13,6 +13,10 @@ resource "random_password" "grafana_password" {
   length = 16
 }
 
+resource "random_password" "loki_password" {
+  length = 16
+}
+
 resource "kubernetes_secret_v1" "grafana_oauth_secret" {
   metadata {
     name      = "grafana-oauth"
@@ -25,13 +29,24 @@ resource "kubernetes_secret_v1" "grafana_oauth_secret" {
   }
 }
 
+resource "kubernetes_secret_v1" "loki_auth_secret" {
+  metadata {
+    name      = "loki-auth"
+    namespace = kubernetes_namespace_v1.monitoring.metadata[0].name
+  }
+
+  data = {
+    "LOKI_PASSWORD" = random_password.loki_password.result
+  }
+}
+
 
 resource "helm_release" "grafana-agent-operator" {
   name       = "grafana-agent-operator"
   namespace  = kubernetes_namespace_v1.monitoring.metadata[0].name
   repository = "https://grafana.github.io/helm-charts"
   chart      = "grafana-agent-operator"
-  version    = "0.4.0"
+  version    = "0.5.1"
   depends_on = [helm_release.cert_manager]
   timeout    = 300
 
@@ -42,29 +57,29 @@ resource "helm_release" "grafana-agent-operator" {
 
   set {
     name  = "resources.requests.memory"
-    value = "128Mi"
+    value = var.grafana_agent_operator_resources_requests_memory
   }
 
   set {
     name  = "resources.requests.cpu"
-    value = "100m"
+    value = var.grafana_agent_operator_resources_requests_cpu
   }
 
   set {
     name  = "resources.limits.memory"
-    value = "256Mi"
+    value = var.grafana_agent_operator_resources_limits_memory
   }
 
   set {
     name  = "resources.limits.cpu"
-    value = "200m"
+    value = var.grafana_agent_operator_resources_limits_cpu
   }
 }
 
 resource "helm_release" "kube-prometheus" {
   name       = "kube-prometheus-stack"
   namespace  = kubernetes_namespace_v1.monitoring.metadata[0].name
-  version    = "75.2.1"
+  version    = "75.3.0"
   repository = "https://prometheus-community.github.io/helm-charts"
   chart      = "kube-prometheus-stack"
   timeout    = 600
@@ -185,7 +200,7 @@ resource "helm_release" "kube-prometheus" {
 
   set {
     name  = "grafana.image.tag"
-    value = "10.4.2"
+    value = "10.4.4"
   }
 
   set {
@@ -220,12 +235,22 @@ resource "helm_release" "loki" {
   version    = "6.30.1"
   repository = "https://grafana.github.io/helm-charts"
   chart      = "loki"
-  depends_on = [helm_release.kube-prometheus, helm_release.grafana-agent-operator]
+  depends_on = [helm_release.kube-prometheus, helm_release.grafana-agent-operator, kubernetes_secret_v1.loki_auth_secret]
   timeout    = 300
   values     = [file("${path.root}/configs/loki_config.yaml")]
   force_update = true
   replace      = true
   recreate_pods = true
+
+  set {
+    name  = "loki.auth.basic.username"
+    value = "promtail"
+  }
+
+  set_sensitive {
+    name  = "loki.auth.basic.password"
+    value = random_password.loki_password.result
+  }
 
   set {
     name  = "crds.create"
@@ -257,14 +282,10 @@ resource "helm_release" "loki" {
     value = var.loki_resources_limits_cpu
   }
 
-  set {
-    name  = "loki.extraArgs[0]"
-    value = "-config.expand-env=true"
-  }
 
   set {
     name  = "loki.auth_enabled"
-    value = "false"
+    value = "true"
   }
 
   set {
@@ -336,17 +357,37 @@ resource "helm_release" "loki" {
     name  = "grafana.datasources.datasources\\.yaml.datasources[0].jsonData.maxLines"
     value = "5000"
   }
+
+  set {
+    name  = "grafana.datasources.datasources\\.yaml.datasources[0].basicAuth"
+    value = "true"
+  }
+
+  set {
+    name  = "grafana.datasources.datasources\\.yaml.datasources[0].basicAuthUser"
+    value = "promtail"
+  }
+
+  set_sensitive {
+    name  = "grafana.datasources.datasources\\.yaml.datasources[0].basicAuthPassword"
+    value = random_password.loki_password.result
+  }
 }
 
 resource "helm_release" "promtail" {
   name       = "promtail"
   namespace  = kubernetes_namespace_v1.monitoring.metadata[0].name
-  version    = "6.16.0"
+  version    = "6.17.0"
   repository = "https://grafana.github.io/helm-charts"
   chart      = "promtail"
-  depends_on = [helm_release.loki]
+  depends_on = [helm_release.loki, kubernetes_secret_v1.loki_auth_secret]
   timeout    = 300
   values     = [file("${path.root}/configs/promtail_config.yaml")]
+
+  set {
+    name  = "extraEnvFrom[0].secretRef.name"
+    value = kubernetes_secret_v1.loki_auth_secret.metadata[0].name
+  }
 
   set {
     name  = "serviceMonitor.enabled"
@@ -382,6 +423,7 @@ resource "kubernetes_config_map_v1" "grafana_dashboards" {
     "microservices-logs.json" = file("${path.root}/configs/microservices_logs_dashboard.json")
     "microservices-metrics.json" = file("${path.root}/configs/microservices_metrics_dashboard.json")
     "microservices-health.json"  = file("${path.root}/configs/microservices_health_dashboard.json")
+    "system-overview.json"      = file("${path.root}/configs/system_overview_dashboard.json")
   }
 
   depends_on = [helm_release.kube-prometheus]
@@ -406,45 +448,91 @@ resource "kubernetes_config_map_v1" "microservices_alerts" {
           for: 5m
           labels:
             severity: warning
+            team: platform
           annotations:
             summary: "High CPU usage for microservice pod {{ $labels.pod }}"
             description: "Microservice pod {{ $labels.pod }} has high CPU usage (> 80%) for more than 5 minutes."
-
+            runbook_url: "https://example.com/runbooks/high-cpu"
+        - alert: MicroserviceCriticalCPUUsage
+          expr: sum(rate(container_cpu_usage_seconds_total{namespace="microservices"}[5m])) by (pod) > 0.95
+          for: 5m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "Critical CPU usage for microservice pod {{ $labels.pod }}"
+            description: "Microservice pod {{ $labels.pod }} has critical CPU usage (> 95%) for more than 5 minutes."
+            runbook_url: "https://example.com/runbooks/critical-cpu"
         - alert: MicroserviceHighMemoryUsage
           expr: sum(container_memory_usage_bytes{namespace="microservices"}) by (pod) / sum(container_spec_memory_limit_bytes{namespace="microservices"}) by (pod) > 0.8
           for: 5m
           labels:
             severity: warning
+            team: platform
           annotations:
             summary: "High memory usage for microservice pod {{ $labels.pod }}"
             description: "Microservice pod {{ $labels.pod }} has high memory usage (> 80%) for more than 5 minutes."
-
+            runbook_url: "https://example.com/runbooks/high-memory"
+        - alert: MicroserviceCriticalMemoryUsage
+          expr: sum(container_memory_usage_bytes{namespace="microservices"}) by (pod) / sum(container_spec_memory_limit_bytes{namespace="microservices"}) by (pod) > 0.95
+          for: 5m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "Critical memory usage for microservice pod {{ $labels.pod }}"
+            description: "Microservice pod {{ $labels.pod }} has critical memory usage (> 95%) for more than 5 minutes."
+            runbook_url: "https://example.com/runbooks/critical-memory"
         - alert: MicroserviceHighErrorRate
           expr: sum(rate(http_requests_total{namespace="microservices", status=~"5.."}[5m])) by (service) / sum(rate(http_requests_total{namespace="microservices"}[5m])) by (service) > 0.05
           for: 5m
           labels:
             severity: critical
+            team: application
           annotations:
             summary: "High error rate for microservice {{ $labels.service }}"
             description: "Microservice {{ $labels.service }} has a high HTTP error rate (> 5%) for more than 5 minutes."
-
+            runbook_url: "https://example.com/runbooks/high-error-rate"
         - alert: MicroserviceHighLatency
           expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace="microservices"}[5m])) by (service, le)) > 1
           for: 5m
           labels:
             severity: warning
+            team: application
           annotations:
             summary: "High latency for microservice {{ $labels.service }}"
             description: "Microservice {{ $labels.service }} has a 95th percentile latency of more than 1 second for more than 5 minutes."
-
+            runbook_url: "https://example.com/runbooks/high-latency"
+        - alert: MicroserviceCriticalLatency
+          expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace="microservices"}[5m])) by (service, le)) > 2
+          for: 5m
+          labels:
+            severity: critical
+            team: application
+          annotations:
+            summary: "Critical latency for microservice {{ $labels.service }}"
+            description: "Microservice {{ $labels.service }} has a 95th percentile latency of more than 2 seconds for more than 5 minutes."
+            runbook_url: "https://example.com/runbooks/critical-latency"
         - alert: MicroserviceDown
           expr: up{namespace="microservices"} == 0
           for: 5m
           labels:
             severity: critical
+            team: platform
           annotations:
             summary: "Microservice {{ $labels.service }} is down"
             description: "Microservice {{ $labels.service }} has been down for more than 5 minutes."
+            runbook_url: "https://example.com/runbooks/service-down"
+        - alert: MicroservicePodRestarts
+          expr: increase(kube_pod_container_status_restarts_total{namespace="microservices"}[1h]) > 2
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "Microservice pod {{ $labels.pod }} is restarting frequently"
+            description: "Microservice pod {{ $labels.pod }} has restarted more than 2 times in the last hour."
+            runbook_url: "https://example.com/runbooks/pod-restarts"
     EOT
   }
 

@@ -63,6 +63,9 @@ resource "helm_release" "keycloak" {
   namespace         = kubernetes_namespace_v1.keycloak.metadata[0].name
   create_namespace  = false
   dependency_update = true
+  force_update = true
+  replace      = true
+  recreate_pods = true
   timeout           = 300
 
   depends_on = [
@@ -74,7 +77,6 @@ resource "helm_release" "keycloak" {
 
   values = [
     <<-EOT
-    # Global parameters
     global:
       imageRegistry: ""
       imagePullSecrets: []
@@ -86,7 +88,6 @@ resource "helm_release" "keycloak" {
         openshift:
           adaptSecurityContext: auto
 
-    # Common parameters
     kubeVersion: ""
     nameOverride: ""
     fullnameOverride: ""
@@ -106,21 +107,15 @@ resource "helm_release" "keycloak" {
       args:
         - infinity
 
-    replicaCount: 1
+    replicaCount: ${var.keycloak_replicas}
 
-    # Production mode settings
     production: true
-
-    # Admin realm
     adminRealm: "master"
-
-    # Authentication
     auth:
       adminUser: admin
       existingSecret: keycloak-admin
       passwordSecretKey: password
 
-    # Environment variables
     httpRelativePath: "/auth/"
     proxyHeaders: "xforwarded"
     proxy: ""
@@ -148,14 +143,17 @@ resource "helm_release" "keycloak" {
         value: "true"
       - name: KEYCLOAK_EXTRA_ARGS
         value: "--import-realm --spi-realm-import-strategy=OVERWRITE_EXISTING"
+      - name: JAVA_OPTS_APPEND
+        value: "-Dquarkus.bootstrap.runner.serialized=false"
       - name: KC_HEALTH_ENABLED
         value: "true"
       - name: KC_METRICS_ENABLED
         value: "true"
       - name: KC_LOG_LEVEL
         value: "debug"
+      - name: KC_CACHE
+        value: "local"
 
-    # Database configuration
     externalDatabase:
       host: postgresql.postgresql.svc.cluster.local
       port: 5432
@@ -164,11 +162,9 @@ resource "helm_release" "keycloak" {
       existingSecret: keycloak-postgresql
       existingSecretPasswordKey: POSTGRES_PASSWORD
 
-    # Disable the default PostgreSQL installation
     postgresql:
       enabled: false
 
-    # Service configuration
     service:
       type: ClusterIP
       http:
@@ -179,53 +175,25 @@ resource "helm_release" "keycloak" {
         http: 80
         https: 443
 
-    # Resource limits
     resourcesPreset: "small"
     resources:
       requests:
-        memory: "512Mi"
-        cpu: "500m"
+        memory: "${var.keycloak_resources_requests_memory}"
+        cpu: "${var.keycloak_resources_requests_cpu}"
       limits:
-        memory: "1Gi"
-        cpu: "1000m"
+        memory: "${var.keycloak_resources_limits_memory}"
+        cpu: "${var.keycloak_resources_limits_cpu}"
 
-    # Metrics and monitoring
     metrics:
       enabled: true
       serviceMonitor:
         enabled: true
         namespace: "monitoring"
 
-    # Pod disruption budget for high availability
     podDisruptionBudget:
       enabled: true
       minAvailable: 1
 
-    livenessProbe:
-      enabled: true
-      initialDelaySeconds: 300
-      periodSeconds: 10
-      timeoutSeconds: 5
-      failureThreshold: 3
-      successThreshold: 1
-
-    readinessProbe:
-      enabled: true
-      initialDelaySeconds: 30
-      periodSeconds: 10
-      timeoutSeconds: 1
-      failureThreshold: 3
-      successThreshold: 1
-
-    startupProbe:
-      enabled: true
-      initialDelaySeconds: 30
-      periodSeconds: 10
-      timeoutSeconds: 5
-      failureThreshold: 60
-      successThreshold: 1
-
-    # Affinity for pod scheduling
     affinity:
       podAntiAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:
@@ -239,23 +207,13 @@ resource "helm_release" "keycloak" {
                       - keycloak
               topologyKey: kubernetes.io/hostname
 
-    # Cache configuration for high availability
-    cache:
-      enabled: true
-      stack: kubernetes
-      configFile: "cache-ispn.xml"
-      useHeadlessServiceWithAppVersion: false
-
-    # Logging configuration
     logging:
       output: default
       level: DEBUG
 
-    # TLS configuration
     tls:
       enabled: false
 
-    # Network Policy configuration
     networkPolicy:
       enabled: true
       allowExternal: true
@@ -266,7 +224,6 @@ resource "helm_release" "keycloak" {
       ingressNSMatchLabels: {}
       ingressNSPodMatchLabels: {}
 
-    # RBAC parameters
     serviceAccount:
       create: true
       name: ""
@@ -278,7 +235,6 @@ resource "helm_release" "keycloak" {
       create: false
       rules: []
 
-    # Mount realm configuration
     extraVolumes:
       - name: realm-config
         configMap:

@@ -1,0 +1,214 @@
+global:
+  image:
+    repository: quay.io/argoproj/argocd
+  domain: "${DOMAIN}"
+
+redis:
+  enabled: true
+  resources:
+    requests:
+      cpu: ${ARGOCD_REDIS_CPU}
+      memory: ${ARGOCD_REDIS_MEMORY}
+  externalConfig: false
+  existingSecret: false
+  createSecret: true
+  secretName: "argocd-redis"
+
+configs:
+  cm:
+    admin.enabled: true
+    timeout.reconciliation: 180s
+    application.instanceLabelKey: argocd.argoproj.io/instance
+    url: "${ARGOCD_URL}"
+    oidc.config: |
+      name: Keycloak
+      issuer: "${KEYCLOAK_ISSUER}"
+      clientID: argocd
+      clientSecret: $argo-oidc-client-secret
+      requestedScopes: ["openid", "profile", "email"]
+      insecureSkipVerify: true
+    resource.customizations.ignoreResourceUpdates.all: |
+      jsonPointers:
+        - /status
+    resource.customizations.ignoreResourceUpdates.argoproj.io_Application: |
+      jqPathExpressions:
+        - '.metadata.annotations."notified.notifications.argoproj.io"'
+        - '.metadata.annotations."argocd.argoproj.io/refresh"'
+        - '.metadata.annotations."argocd.argoproj.io/hydrate"'
+        - '.operation'
+    resource.customizations.ignoreResourceUpdates.argoproj.io_Rollout: |
+      jqPathExpressions:
+        - '.metadata.annotations."notified.notifications.argoproj.io"'
+    resource.customizations.ignoreResourceUpdates.autoscaling_HorizontalPodAutoscaler: |
+      jqPathExpressions:
+        - '.metadata.annotations."autoscaling.alpha.kubernetes.io/behavior"'
+        - '.metadata.annotations."autoscaling.alpha.kubernetes.io/conditions"'
+        - '.metadata.annotations."autoscaling.alpha.kubernetes.io/metrics"'
+        - '.metadata.annotations."autoscaling.alpha.kubernetes.io/current-metrics"'
+    resource.customizations.ignoreResourceUpdates.ConfigMap: |
+      jqPathExpressions:
+        - '.metadata.annotations."cluster-autoscaler.kubernetes.io/last-updated"'
+        - '.metadata.annotations."control-plane.alpha.kubernetes.io/leader"'
+    resource.customizations.ignoreResourceUpdates.apps_ReplicaSet: |
+      jqPathExpressions:
+        - '.metadata.annotations."deployment.kubernetes.io/desired-replicas"'
+        - '.metadata.annotations."deployment.kubernetes.io/max-replicas"'
+        - '.metadata.annotations."rollout.argoproj.io/desired-replicas"'
+    resource.customizations.ignoreResourceUpdates.discovery.k8s.io_EndpointSlice: |
+      jsonPointers:
+        - /metadata
+        - /endpoints
+        - /ports
+    resource.customizations.ignoreResourceUpdates.Endpoints: |
+      jsonPointers:
+        - /metadata
+        - /subsets
+    resource.exclusions: |
+      - apiGroups:
+        - ''
+        - discovery.k8s.io
+        kinds:
+        - Endpoints
+        - EndpointSlice
+      - apiGroups:
+        - coordination.k8s.io
+        kinds:
+        - Lease
+      - apiGroups:
+        - authentication.k8s.io
+        - authorization.k8s.io
+        kinds:
+        - SelfSubjectReview
+        - TokenReview
+        - LocalSubjectAccessReview
+        - SelfSubjectAccessReview
+        - SelfSubjectRulesReview
+        - SubjectAccessReview
+      - apiGroups:
+        - certificates.k8s.io
+        kinds:
+        - CertificateSigningRequest
+      - apiGroups:
+        - cert-manager.io
+        kinds:
+        - CertificateRequest
+      - apiGroups:
+        - cilium.io
+        kinds:
+        - CiliumIdentity
+        - CiliumEndpoint
+        - CiliumEndpointSlice
+      - apiGroups:
+        - kyverno.io
+        - reports.kyverno.io
+        - wgpolicyk8s.io
+        kinds:
+        - PolicyReport
+        - ClusterPolicyReport
+        - EphemeralReport
+        - ClusterEphemeralReport
+        - AdmissionReport
+        - ClusterAdmissionReport
+        - BackgroundScanReport
+        - ClusterBackgroundScanReport
+        - UpdateRequest
+
+  params:
+    server.insecure: false
+    server.basehref: /argocd
+    server.rootpath: /argocd
+    server.staticassets: /argocd
+    controller.status.processors: 20
+    controller.operation.processors: 10
+    controller.self.heal.timeout.seconds: 5
+    controller.repo.server.timeout.seconds: 60
+    controller.sync.timeout.seconds: 0
+    reposerver.parallelism.limit: 0
+    applicationsetcontroller.policy: sync
+    applicationsetcontroller.enable.progressive.syncs: false
+
+  rbac:
+    policy.default: role:readonly
+    policy.csv: |
+      p, role:org-admin, applications, *, */*, allow
+      p, role:org-admin, clusters, get, *, allow
+      p, role:org-admin, repositories, *, *, allow
+      p, role:org-admin, projects, *, *, allow
+      g, admin, role:org-admin
+      g, admin@microservices.com, role:org-admin
+    scopes: "[groups, email]"
+    policy.matchMode: "glob"
+
+server:
+  replicas: ${ARGOCD_SERVER_REPLICAS}
+  resources:
+    requests:
+      cpu: ${ARGOCD_SERVER_CPU}
+      memory: ${ARGOCD_SERVER_MEMORY}
+  certificate:
+    enabled: true
+    issuer:
+      kind: "ClusterIssuer"
+      name: "letsencrypt-production-cluster-issuer"
+  ingress:
+    enabled: true
+    ingressClassName: "nginx"
+    path: /argocd
+    pathType: Prefix
+    hostname: "${DOMAIN}"
+    https: true
+    tls:
+      - hosts:
+          - "${DOMAIN}"
+        secretName: argocd-server-tls
+    hosts:
+      - "${DOMAIN}"
+    annotations:
+      cert-manager.io/cluster-issuer: "letsencrypt-production-cluster-issuer"
+      acme.cert-manager.io/http01-edit-in-place: "true"
+      nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+      nginx.ingress.kubernetes.io/use-regex: "true"
+      nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+      nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+
+controller:
+  replicas: ${ARGOCD_CONTROLLER_REPLICAS}
+  resources:
+    requests:
+      cpu: ${ARGOCD_CONTROLLER_CPU}
+      memory: ${ARGOCD_CONTROLLER_MEMORY}
+  dynamicClusterDistribution: false
+  heartbeatTime: 10
+
+repoServer:
+  replicas: ${ARGOCD_REPO_SERVER_REPLICAS}
+  resources:
+    requests:
+      cpu: ${ARGOCD_REPO_SERVER_CPU}
+      memory: ${ARGOCD_REPO_SERVER_MEMORY}
+  containerPorts:
+    server: 8081
+    metrics: 8084
+
+applicationSet:
+  replicas: ${ARGOCD_APPLICATION_SET_REPLICAS}
+  resources:
+    requests:
+      cpu: ${ARGOCD_APPLICATION_SET_CPU}
+      memory: ${ARGOCD_APPLICATION_SET_MEMORY}
+  metrics:
+    enabled: false
+  containerPorts:
+    metrics: 8080
+    probe: 8081
+    webhook: 7000
+
+notifications:
+  enabled: true
+  resources:
+    requests:
+      cpu: ${ARGOCD_NOTIFICATIONS_CPU}
+      memory: ${ARGOCD_NOTIFICATIONS_MEMORY}
+
+dex:
+  enabled: false

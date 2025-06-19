@@ -214,73 +214,73 @@ variable "cert_manager_cainjector_replicas" {
 variable "cert_manager_resources_requests_cpu" {
   description = "CPU requests for cert-manager"
   type        = string
-  default     = "100m"
+  default     = "80m"
 }
 
 variable "cert_manager_resources_requests_memory" {
   description = "Memory requests for cert-manager"
   type        = string
-  default     = "128Mi"
+  default     = "100Mi"
 }
 
 variable "cert_manager_resources_limits_cpu" {
   description = "CPU limits for cert-manager"
   type        = string
-  default     = "200m"
+  default     = "160m"
 }
 
 variable "cert_manager_resources_limits_memory" {
   description = "Memory limits for cert-manager"
   type        = string
-  default     = "256Mi"
+  default     = "200Mi"
 }
 
 variable "cert_manager_webhook_resources_requests_cpu" {
   description = "CPU requests for cert-manager webhook"
   type        = string
-  default     = "50m"
+  default     = "40m"
 }
 
 variable "cert_manager_webhook_resources_requests_memory" {
   description = "Memory requests for cert-manager webhook"
   type        = string
-  default     = "64Mi"
+  default     = "50Mi"
 }
 
 variable "cert_manager_webhook_resources_limits_cpu" {
   description = "CPU limits for cert-manager webhook"
   type        = string
-  default     = "100m"
+  default     = "80m"
 }
 
 variable "cert_manager_webhook_resources_limits_memory" {
   description = "Memory limits for cert-manager webhook"
   type        = string
-  default     = "128Mi"
+  default     = "100Mi"
 }
 
 variable "cert_manager_cainjector_resources_requests_cpu" {
   description = "CPU requests for cert-manager cainjector"
   type        = string
-  default     = "50m"
+  default     = "40m"
 }
 
 variable "cert_manager_cainjector_resources_requests_memory" {
   description = "Memory requests for cert-manager cainjector"
   type        = string
-  default     = "64Mi"
+  default     = "50Mi"
 }
 
 variable "cert_manager_cainjector_resources_limits_cpu" {
   description = "CPU limits for cert-manager cainjector"
   type        = string
-  default     = "100m"
+  default     = "80m"
 }
 
 variable "cert_manager_cainjector_resources_limits_memory" {
   description = "Memory limits for cert-manager cainjector"
   type        = string
-  default     = "128Mi"
+  default     = "100Mi"
 }
 
 # NGINX Ingress variables
@@ -311,25 +311,25 @@ variable "nginx_ingress_max_replicas" {
 variable "nginx_ingress_resources_requests_cpu" {
   description = "CPU requests for NGINX Ingress"
   type        = string
-  default     = "200m"
+  default     = "150m"
 }
 
 variable "nginx_ingress_resources_requests_memory" {
   description = "Memory requests for NGINX Ingress"
   type        = string
-  default     = "256Mi"
+  default     = "200Mi"
 }
 
 variable "nginx_ingress_resources_limits_cpu" {
   description = "CPU limits for NGINX Ingress"
   type        = string
-  default     = "500m"
+  default     = "400m"
 }
 
 variable "nginx_ingress_resources_limits_memory" {
   description = "Memory limits for NGINX Ingress"
   type        = string
-  default     = "512Mi"
+  default     = "400Mi"
 }
 
 # PostgreSQL variables
@@ -348,25 +348,25 @@ variable "postgresql_primary_storage_size" {
 variable "postgresql_primary_resources_requests_memory" {
   description = "Memory requests for PostgreSQL primary"
   type        = string
-  default     = "256Mi"
+  default     = "200Mi"
 }
 
 variable "postgresql_primary_resources_requests_cpu" {
   description = "CPU requests for PostgreSQL primary"
   type        = string
-  default     = "250m"
+  default     = "200m"
 }
 
 variable "postgresql_primary_resources_limits_memory" {
   description = "Memory limits for PostgreSQL primary"
   type        = string
-  default     = "1Gi"
+  default     = "800Mi"
 }
 
 variable "postgresql_primary_resources_limits_cpu" {
   description = "CPU limits for PostgreSQL primary"
   type        = string
-  default     = "1000m"
+  default     = "800m"
 }
 
 variable "postgresql_max_connections" {
@@ -396,25 +396,25 @@ variable "postgresql_read_replicas_storage_size" {
 variable "postgresql_read_replicas_resources_requests_memory" {
   description = "Memory requests for PostgreSQL read replicas"
   type        = string
-  default     = "256Mi"
+  default     = "200Mi"
 }
 
 variable "postgresql_read_replicas_resources_requests_cpu" {
   description = "CPU requests for PostgreSQL read replicas"
   type        = string
-  default     = "250m"
+  default     = "200m"
 }
 
 variable "postgresql_read_replicas_resources_limits_memory" {
   description = "Memory limits for PostgreSQL read replicas"
   type        = string
-  default     = "1Gi"
+  default     = "800Mi"
 }
 
 variable "postgresql_read_replicas_resources_limits_cpu" {
   description = "CPU limits for PostgreSQL read replicas"
   type        = string
-  default     = "500m"
+  default     = "400m"
 }
 
 variable "prometheus_replicas" {
@@ -426,25 +426,25 @@ variable "prometheus_replicas" {
 variable "prometheus_resources_requests_memory" {
   description = "Memory requests for Prometheus"
   type        = string
-  default     = "512Mi"
+  default     = "400Mi"
 }
 
 variable "prometheus_resources_requests_cpu" {
   description = "CPU requests for Prometheus"
   type        = string
-  default     = "200m"
+  default     = "150m"
 }
 
 variable "prometheus_resources_limits_memory" {
   description = "Memory limits for Prometheus"
   type        = string
-  default     = "1Gi"
+  default     = "800Mi"
 }
 
 variable "prometheus_resources_limits_cpu" {
   description = "CPU limits for Prometheus"
   type        = string
-  default     = "500m"
+  default     = "400m"
 }
 
 variable "prometheus_storage_size" {
@@ -462,25 +462,25 @@ variable "alertmanager_replicas" {
 variable "alertmanager_resources_requests_memory" {
   description = "Memory requests for Alertmanager"
   type        = string
-  default     = "128Mi"
+  default     = "100Mi"
 }
 
 variable "alertmanager_resources_requests_cpu" {
   description = "CPU requests for Alertmanager"
   type        = string
-  default     = "100m"
+  default     = "80m"
 }
 
 variable "alertmanager_resources_limits_memory" {
   description = "Memory limits for Alertmanager"
   type        = string
-  default     = "256Mi"
+  default     = "200Mi"
 }
 
 variable "alertmanager_resources_limits_cpu" {
   description = "CPU limits for Alertmanager"
   type        = string
-  default     = "200m"
+  default     = "160m"
 }
 
 variable "alertmanager_storage_size" {
@@ -498,25 +498,25 @@ variable "grafana_replicas" {
 variable "grafana_resources_requests_memory" {
   description = "Memory requests for Grafana"
   type        = string
-  default     = "256Mi"
+  default     = "200Mi"
 }
 
 variable "grafana_resources_requests_cpu" {
   description = "CPU requests for Grafana"
   type        = string
-  default     = "100m"
+  default     = "80m"
 }
 
 variable "grafana_resources_limits_memory" {
   description = "Memory limits for Grafana"
   type        = string
-  default     = "512Mi"
+  default     = "400Mi"
 }
 
 variable "grafana_resources_limits_cpu" {
   description = "CPU limits for Grafana"
   type        = string
-  default     = "200m"
+  default     = "160m"
 }
 
 variable "grafana_storage_size" {
@@ -534,29 +534,207 @@ variable "loki_replicas" {
 variable "loki_resources_requests_memory" {
   description = "Memory requests for Loki"
   type        = string
-  default     = "512Mi"
+  default     = "400Mi"
 }
 
 variable "loki_resources_requests_cpu" {
   description = "CPU requests for Loki"
   type        = string
-  default     = "200m"
+  default     = "150m"
 }
 
 variable "loki_resources_limits_memory" {
   description = "Memory limits for Loki"
   type        = string
-  default     = "1Gi"
+  default     = "800Mi"
 }
 
 variable "loki_resources_limits_cpu" {
   description = "CPU limits for Loki"
   type        = string
-  default     = "500m"
+  default     = "400m"
 }
 
 variable "loki_storage_size" {
   description = "Storage size for Loki"
   type        = string
   default     = "10Gi"
+}
+
+# Keycloak variables
+variable "keycloak_replicas" {
+  description = "Number of Keycloak replicas"
+  type        = number
+  default     = 1
+}
+
+variable "keycloak_resources_requests_memory" {
+  description = "Memory requests for Keycloak"
+  type        = string
+  default     = "400Mi"
+}
+
+variable "keycloak_resources_requests_cpu" {
+  description = "CPU requests for Keycloak"
+  type        = string
+  default     = "400m"
+}
+
+variable "keycloak_resources_limits_memory" {
+  description = "Memory limits for Keycloak"
+  type        = string
+  default     = "800Mi"
+}
+
+variable "keycloak_resources_limits_cpu" {
+  description = "CPU limits for Keycloak"
+  type        = string
+  default     = "800m"
+}
+
+# ArgoCD variables
+variable "argocd_server_replicas" {
+  description = "Number of ArgoCD server replicas"
+  type        = number
+  default     = 1
+}
+
+variable "argocd_server_resources_requests_memory" {
+  description = "Memory requests for ArgoCD server"
+  type        = string
+  default     = "100Mi"
+}
+
+variable "argocd_server_resources_requests_cpu" {
+  description = "CPU requests for ArgoCD server"
+  type        = string
+  default     = "80m"
+}
+
+variable "argocd_controller_replicas" {
+  description = "Number of ArgoCD controller replicas"
+  type        = number
+  default     = 1
+}
+
+variable "argocd_controller_resources_requests_memory" {
+  description = "Memory requests for ArgoCD controller"
+  type        = string
+  default     = "100Mi"
+}
+
+variable "argocd_controller_resources_requests_cpu" {
+  description = "CPU requests for ArgoCD controller"
+  type        = string
+  default     = "80m"
+}
+
+variable "argocd_repo_server_replicas" {
+  description = "Number of ArgoCD repo server replicas"
+  type        = number
+  default     = 1
+}
+
+variable "argocd_repo_server_resources_requests_memory" {
+  description = "Memory requests for ArgoCD repo server"
+  type        = string
+  default     = "50Mi"
+}
+
+variable "argocd_repo_server_resources_requests_cpu" {
+  description = "CPU requests for ArgoCD repo server"
+  type        = string
+  default     = "40m"
+}
+
+variable "argocd_application_set_replicas" {
+  description = "Number of ArgoCD application set replicas"
+  type        = number
+  default     = 1
+}
+
+variable "argocd_application_set_resources_requests_memory" {
+  description = "Memory requests for ArgoCD application set"
+  type        = string
+  default     = "50Mi"
+}
+
+variable "argocd_application_set_resources_requests_cpu" {
+  description = "CPU requests for ArgoCD application set"
+  type        = string
+  default     = "40m"
+}
+
+variable "argocd_notifications_resources_requests_memory" {
+  description = "Memory requests for ArgoCD notifications"
+  type        = string
+  default     = "50Mi"
+}
+
+variable "argocd_notifications_resources_requests_cpu" {
+  description = "CPU requests for ArgoCD notifications"
+  type        = string
+  default     = "40m"
+}
+
+variable "argocd_redis_resources_requests_memory" {
+  description = "Memory requests for ArgoCD Redis"
+  type        = string
+  default     = "50Mi"
+}
+
+variable "argocd_redis_resources_requests_cpu" {
+  description = "CPU requests for ArgoCD Redis"
+  type        = string
+  default     = "40m"
+}
+
+# Grafana Agent Operator variables
+variable "grafana_agent_operator_resources_requests_memory" {
+  description = "Memory requests for Grafana Agent Operator"
+  type        = string
+  default     = "100Mi"
+}
+
+variable "grafana_agent_operator_resources_requests_cpu" {
+  description = "CPU requests for Grafana Agent Operator"
+  type        = string
+  default     = "80m"
+}
+
+variable "grafana_agent_operator_resources_limits_memory" {
+  description = "Memory limits for Grafana Agent Operator"
+  type        = string
+  default     = "200Mi"
+}
+
+variable "grafana_agent_operator_resources_limits_cpu" {
+  description = "CPU limits for Grafana Agent Operator"
+  type        = string
+  default     = "160m"
+}
+
+# PostgreSQL metrics variables
+variable "postgresql_metrics_resources_requests_memory" {
+  description = "Memory requests for PostgreSQL metrics"
+  type        = string
+  default     = "25Mi"
+}
+
+variable "postgresql_metrics_resources_requests_cpu" {
+  description = "CPU requests for PostgreSQL metrics"
+  type        = string
+  default     = "40m"
+}
+
+variable "postgresql_metrics_resources_limits_memory" {
+  description = "Memory limits for PostgreSQL metrics"
+  type        = string
+  default     = "50Mi"
+}
+
+variable "postgresql_metrics_resources_limits_cpu" {
+  description = "CPU limits for PostgreSQL metrics"
+  type        = string
+  default     = "80m"
 }

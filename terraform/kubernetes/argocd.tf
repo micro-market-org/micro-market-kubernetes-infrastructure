@@ -50,10 +50,26 @@ resource "helm_release" "argocd" {
   depends_on       = [helm_release.cert_manager]
   create_namespace = false
   values = [
-    templatefile("${path.root}/configs/argocd_config.yaml", {
+    templatefile("${path.root}/configs/argocd_config.yaml.template", {
       ARGOCD_URL      = "https://${local.argocd_domain}/argocd",
       KEYCLOAK_ISSUER = "https://${local.argocd_domain}/auth/realms/microservices",
       DOMAIN          = local.argocd_domain,
+      ARGOCD_SERVER_REPLICAS = var.argocd_server_replicas,
+      ARGOCD_SERVER_CPU = var.argocd_server_resources_requests_cpu,
+      ARGOCD_SERVER_MEMORY = var.argocd_server_resources_requests_memory,
+      ARGOCD_CONTROLLER_REPLICAS = var.argocd_controller_replicas,
+      ARGOCD_CONTROLLER_CPU = var.argocd_controller_resources_requests_cpu,
+      ARGOCD_CONTROLLER_MEMORY = var.argocd_controller_resources_requests_memory,
+      ARGOCD_REPO_SERVER_REPLICAS = var.argocd_repo_server_replicas,
+      ARGOCD_REPO_SERVER_CPU = var.argocd_repo_server_resources_requests_cpu,
+      ARGOCD_REPO_SERVER_MEMORY = var.argocd_repo_server_resources_requests_memory,
+      ARGOCD_APPLICATION_SET_REPLICAS = var.argocd_application_set_replicas,
+      ARGOCD_APPLICATION_SET_CPU = var.argocd_application_set_resources_requests_cpu,
+      ARGOCD_APPLICATION_SET_MEMORY = var.argocd_application_set_resources_requests_memory,
+      ARGOCD_NOTIFICATIONS_CPU = var.argocd_notifications_resources_requests_cpu,
+      ARGOCD_NOTIFICATIONS_MEMORY = var.argocd_notifications_resources_requests_memory,
+      ARGOCD_REDIS_CPU = var.argocd_redis_resources_requests_cpu,
+      ARGOCD_REDIS_MEMORY = var.argocd_redis_resources_requests_memory
     })
   ]
   timeout = 200

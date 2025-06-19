@@ -12,6 +12,9 @@ config:
       external_labels:
         cluster: ${CLUSTER_NAME}
         environment: ${CLUSTER_NAME}
+      basic_auth:
+        username: "promtail"
+        password: "${LOKI_PASSWORD}"
 
   snippets:
     pipelineStages:
@@ -84,14 +87,14 @@ readinessProbe:
     path: /ready
     port: http-metrics
   initialDelaySeconds: 10
-  timeoutSeconds: 1
+  timeoutSeconds: 5
 
 livenessProbe:
   httpGet:
     path: /ready
     port: http-metrics
   initialDelaySeconds: 45
-  timeoutSeconds: 1
+  timeoutSeconds: 5
 
 tolerations:
   - effect: NoSchedule

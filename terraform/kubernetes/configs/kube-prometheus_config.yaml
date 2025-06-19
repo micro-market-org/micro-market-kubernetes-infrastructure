@@ -20,12 +20,12 @@ prometheus:
               storage: 10Gi
     resources:
       requests:
-        memory: "512Mi"
+        memory: "256Mi"
         cpu: "200m"
       limits:
-        memory: "1Gi"
+        memory: "512Mi"
         cpu: "500m"
-    replicas: 2
+    replicas: 1
     affinity:
       podAntiAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:
@@ -174,7 +174,7 @@ alertmanager:
               </table>
 
 grafana:
-  replicas: 2
+  replicas: 1
   resources:
     requests:
       memory: "256Mi"
@@ -286,35 +286,35 @@ grafana:
     default:
       kubernetes-cluster:
         gnetId: 19329
-        revision: 1
+        revision: 2
         datasource: Prometheus
       node-exporter:
         gnetId: 19004
-        revision: 1
+        revision: 2
         datasource: Prometheus
       microservices-logs:
         file: /var/lib/grafana/dashboards/default/microservices-logs.json
     kubernetes:
       k8s-views-global:
         gnetId: 19401
-        revision: 1
+        revision: 2
         datasource: Prometheus
       k8s-views-pods:
         gnetId: 19400
-        revision: 1
+        revision: 2
         datasource: Prometheus
     monitoring:
       prometheus-stats:
         gnetId: 19105
-        revision: 1
+        revision: 2
         datasource: Prometheus
       alertmanager:
         gnetId: 19313
-        revision: 1
+        revision: 2
         datasource: Prometheus
       loki-logs:
         gnetId: 18281
-        revision: 1
+        revision: 2
         datasource: Loki
 
 defaultRules:

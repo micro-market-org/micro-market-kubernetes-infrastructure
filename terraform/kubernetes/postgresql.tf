@@ -109,11 +109,11 @@ resource "helm_release" "postgresql" {
         interval: "30s"
       resources:
         requests:
-          memory: "32Mi"
-          cpu: "50m"
+          memory: ${var.postgresql_metrics_resources_requests_memory}
+          cpu: ${var.postgresql_metrics_resources_requests_cpu}
         limits:
-          memory: "64Mi"
-          cpu: "100m"
+          memory: ${var.postgresql_metrics_resources_limits_memory}
+          cpu: ${var.postgresql_metrics_resources_limits_cpu}
     EOT
   ]
 
