@@ -85,7 +85,6 @@ grafana:
       skipTlsVerify: true
       searchNamespace: ALL
 
-  # Simplified readiness and liveness probes
   readinessProbe:
     httpGet:
       path: /api/health
@@ -130,7 +129,6 @@ grafana:
                     - grafana
             topologyKey: kubernetes.io/hostname
 
-  # Main Grafana configuration
   grafana.ini:
     server:
       serve_from_sub_path: true
@@ -167,15 +165,18 @@ grafana:
       enabled: true
       name: Keycloak
       allow_sign_up: true
+      allow_assign_grafana_admin: true
       client_id: grafana
+      email_attribute_path: email
+      login_attribute_path: username
+      name_attribute_path: full_name
       client_secret: ${GRAFANA_OIDC_CLIENT_SECRET}
-      scopes: openid profile email
+      scopes: openid email profile offline_access roles
       auth_url: https://${DOMAIN}/auth/realms/microservices/protocol/openid-connect/auth
       token_url: https://${DOMAIN}/auth/realms/microservices/protocol/openid-connect/token
       api_url: https://${DOMAIN}/auth/realms/microservices/protocol/openid-connect/userinfo
-      role_attribute_path: contains(roles[*], 'admin') && 'Admin' || contains(roles[*], 'editor') && 'Editor' || 'Viewer'
+      role_attribute_path: contains(roles[*], 'admin') && 'Admin' || contains(roles[*], 'editor') && 'Editor' || 'Admin'
 
-    # Unified alerting configuration
     unified_alerting:
       enabled: true
       alertmanagers:
@@ -188,7 +189,6 @@ grafana:
           implementation: prometheus
           handleGrafanaManagedAlerts: true
 
-    # Disable legacy alerting
     alerting:
       enabled: false
 
@@ -238,24 +238,18 @@ grafana:
             manageAlerts: true
         - name: Loki
           type: loki
-          url: http://loki-gateway.monitoring.svc.cluster.local/loki
+          url: "http://loki:3100/"
           access: proxy
-          isDefault: true
+          isDefault: false
           uid: Loki
+          editable: true
+          secureJsonData:
+            httpHeaderValue1: "test"
           jsonData:
-            timeout: 30
-            maxLines: 1000
+            httpHeaderName1: "X-Scope-OrgID"
             alerting: true
             manageAlerts: true
-            derivedFields:
-              - datasourceUid: Loki
-                matcherRegex: traceID=(\w+)
-                name: TraceID
-                url: https://${DOMAIN}/grafana/explore?orgId=1&left=%5B%22now-1h%22,%22now%22,%22Loki%22,%7B%22expr%22:%22%7Btracing%7D%20|%20json%20|%20traceID%3D%5C%22$$value%5C%22%22%7D%5D
-          basicAuth: true
-          basicAuthUser: promtail
 
-  # Dashboard providers configuration
   dashboardProviders:
     dashboardproviders.yaml:
       apiVersion: 1
@@ -269,7 +263,6 @@ grafana:
           options:
             path: /var/lib/grafana/dashboards/monitoring
 
-  # Alertmanager configuration
   alerting:
     alertmanagers:
       alertmanager:
@@ -282,13 +275,11 @@ grafana:
         handleGrafanaManagedAlerts: true
         implementation: prometheus
 
-  # Provisioning configuration
   provisioning:
     alerting:
       rules_dir: /etc/grafana/provisioning/alerting/rules
       contactpoints_dir: /etc/grafana/provisioning/alerting/contactpoints
 
-  # Volume configurations
   extraVolumeMounts:
     - name: grafana-alert-rules
       mountPath: /etc/grafana/provisioning/alerting/rules
@@ -303,11 +294,7 @@ grafana:
       configMap:
         name: grafana-contact-points
 
-  # Dashboards configuration
   dashboards:
-    default:
-      loki-logs:
-        file: /var/lib/grafana/dashboards/default/loki-logs.json
     monitoring:
       k8s-views-global:
         gnetId: 15757
@@ -317,16 +304,8 @@ grafana:
         gnetId: 13639
         revision: 2
         datasource: Loki
-      keycloak:
-        gnetId: 10441
-        revision: 2
-        datasource: Prometheus
-      prometheus-stats:
-        gnetId: 15760
-        revision: 36
-        datasource: Prometheus
       cert-manager:
-        gnetId: 11001
+        gnetId: 20340
         revision: 1
         datasource: Prometheus
       alert-manager:
@@ -339,10 +318,6 @@ grafana:
         datasource: Prometheus
       coredns:
         gnetId: 14981
-        revision: 2
-        datasource: Prometheus
-      persistent-volumes:
-        gnetId: 20066
         revision: 2
         datasource: Prometheus
 
