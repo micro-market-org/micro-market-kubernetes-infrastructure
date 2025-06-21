@@ -1,0 +1,47 @@
+apiVersion: 1
+
+contactPoints:
+  - name: alertmanager
+    receivers:
+      - uid: alertmanager-receiver
+        type: alertmanager
+        settings:
+          url: http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093
+          basicAuthUser: ""
+          implementation: prometheus
+          handleGrafanaManagedAlerts: true
+
+  - name: email
+    receivers:
+      - uid: email-receiver
+        type: email
+        settings:
+          addresses: daniel-adrian.gherasim@student.tuiasi.ro
+          singleEmail: false
+
+  - name: slack
+    receivers:
+      - uid: slack-receiver
+        type: slack
+        settings:
+          url: https://hooks.slack.com/services/your-slack-webhook-url
+          title: "{{ .CommonLabels.alertname }}"
+          text: "{{ .CommonAnnotations.summary }}\n{{ .CommonAnnotations.description }}"
+
+notificationPolicies:
+  - name: Default policy
+    receiver: alertmanager
+    group_by: ['alertname', 'job', 'severity']
+    routes:
+      - receiver: email
+        matchers:
+          - label: severity
+            operator: "="
+            value: critical
+        continue: true
+      - receiver: slack
+        matchers:
+          - label: severity
+            operator: "="
+            value: warning
+        continue: true

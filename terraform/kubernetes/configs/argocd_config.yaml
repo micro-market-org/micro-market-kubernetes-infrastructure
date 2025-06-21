@@ -197,7 +197,7 @@ applicationSet:
       cpu: 40m
       memory: 50Mi
   metrics:
-    enabled: false
+    enabled: true
   containerPorts:
     metrics: 8080
     probe: 8081

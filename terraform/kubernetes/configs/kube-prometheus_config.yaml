@@ -29,15 +29,15 @@ prometheus:
     affinity:
       podAntiAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          podAffinityTerm:
-            labelSelector:
-              matchExpressions:
-              - key: app
-                operator: In
-                values:
-                - prometheus
-            topologyKey: kubernetes.io/hostname
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - prometheus
+              topologyKey: kubernetes.io/hostname
 
 alertmanager:
   enabled: true
@@ -60,118 +60,9 @@ alertmanager:
     replicas: 2
     retention: 120h
     podAntiAffinity: "soft"
-  config:
-    global:
-      resolve_timeout: 5m
-      smtp_from: "alertmanager@monitoring.local"
-      smtp_smarthost: "smtp.gmail.com:587"
-      smtp_require_tls: true
-    route:
-      group_by: ['alertname', 'job', 'severity']
-      group_wait: 30s
-      group_interval: 5m
-      repeat_interval: 12h
-      receiver: 'email-notifications'
-      routes:
-        - match:
-            severity: critical
-          receiver: 'all-notifications'
-          continue: true
-        - match:
-            severity: warning
-          receiver: 'all-notifications'
-          group_wait: 1m
-          continue: true
-        - match:
-            severity: info
-          receiver: 'email-notifications'
-          group_wait: 2m
-          continue: true
-    inhibit_rules:
-      - source_match:
-          severity: 'critical'
-        target_match:
-          severity: 'warning'
-        equal: ['alertname', 'namespace']
-      - source_match:
-          severity: 'warning'
-        target_match:
-          severity: 'info'
-        equal: ['alertname', 'namespace']
-    receivers:
-      - name: 'email-notifications'
-        email_configs:
-          - to: 'daniel-adrian.gherasim@student.tuiasi.ro'
-            send_resolved: true
-            html: |
-              {{ if eq .Status "firing" }}
-                <h1>🔥 {{ .Alerts.Firing | len }} Alert{{ if gt (len .Alerts.Firing) 1 }}s{{ end }} Firing</h1>
-              {{ end }}
-              {{ if eq .Status "resolved" }}
-                <h1>✅ {{ .Alerts.Resolved | len }} Alert{{ if gt (len .Alerts.Resolved) 1 }}s{{ end }} Resolved</h1>
-              {{ end }}
-
-              <table>
-                <tr><th>Alert</th><th>Summary</th><th>Description</th><th>Severity</th></tr>
-                {{ range .Alerts }}
-                  <tr>
-                    <td>{{ .Labels.alertname }}</td>
-                    <td>{{ .Annotations.summary }}</td>
-                    <td>{{ .Annotations.description }}</td>
-                    <td>{{ .Labels.severity }}</td>
-                  </tr>
-                {{ end }}
-              </table>
-      - name: 'slack-notifications'
-        slack_configs:
-          - channel: '#alerts'
-            send_resolved: true
-            title: '[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}'
-            text: >-
-              {{ range .Alerts }}
-                *Alert:* {{ .Annotations.summary }}
-                *Description:* {{ .Annotations.description }}
-                *Severity:* {{ .Labels.severity }}
-                *Details:*
-                {{ range .Labels.SortedPairs }} • *{{ .Name }}:* `{{ .Value }}`
-                {{ end }}
-              {{ end }}
-      - name: 'all-notifications'
-        slack_configs:
-          - channel: '#alerts'
-            send_resolved: true
-            title: '[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}'
-            text: >-
-              {{ range .Alerts }}
-                *Alert:* {{ .Annotations.summary }}
-                *Description:* {{ .Annotations.description }}
-                *Severity:* {{ .Labels.severity }}
-                *Details:*
-                {{ range .Labels.SortedPairs }} • *{{ .Name }}:* `{{ .Value }}`
-                {{ end }}
-              {{ end }}
-        email_configs:
-          - to: 'daniel-adrian.gherasim@student.tuiasi.ro'
-            send_resolved: true
-            html: |
-              {{ if eq .Status "firing" }}
-                <h1>🔥 {{ .Alerts.Firing | len }} Alert{{ if gt (len .Alerts.Firing) 1 }}s{{ end }} Firing</h1>
-              {{ end }}
-              {{ if eq .Status "resolved" }}
-                <h1>✅ {{ .Alerts.Resolved | len }} Alert{{ if gt (len .Alerts.Resolved) 1 }}s{{ end }} Resolved</h1>
-              {{ end }}
-
-              <table>
-                <tr><th>Alert</th><th>Summary</th><th>Description</th><th>Severity</th></tr>
-                {{ range .Alerts }}
-                  <tr>
-                    <td>{{ .Labels.alertname }}</td>
-                    <td>{{ .Annotations.summary }}</td>
-                    <td>{{ .Annotations.description }}</td>
-                    <td>{{ .Labels.severity }}</td>
-                  </tr>
-                {{ end }}
-              </table>
+    externalUrl: "https://${DOMAIN}/alertmanager"
+  configSecret: "alertmanager-config"
+  configFileName: "alertmanager.yaml"
 
 grafana:
   replicas: 1
@@ -182,28 +73,76 @@ grafana:
     limits:
       memory: "512Mi"
       cpu: "200m"
+  sidecar:
+    dashboards:
+      enabled: true
+      skipTlsVerify: true
+      searchNamespace: ALL
+      provider:
+        disableDelete: false
+    datasources:
+      enabled: true
+      skipTlsVerify: true
+      searchNamespace: ALL
+
+  # Simplified readiness and liveness probes
+  readinessProbe:
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 60
+    timeoutSeconds: 30
+    failureThreshold: 10
+    periodSeconds: 10
+
+  livenessProbe:
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 60
+    timeoutSeconds: 30
+    failureThreshold: 10
+    periodSeconds: 10
+
+  startupProbe:
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 120
+    timeoutSeconds: 30
+    failureThreshold: 30
+    periodSeconds: 10
+
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "3000"
+
   affinity:
     podAntiAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
-      - weight: 100
-        podAffinityTerm:
-          labelSelector:
-            matchExpressions:
-            - key: app.kubernetes.io/name
-              operator: In
-              values:
-              - grafana
-          topologyKey: kubernetes.io/hostname
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                    - grafana
+            topologyKey: kubernetes.io/hostname
+
+  # Main Grafana configuration
   grafana.ini:
     server:
       serve_from_sub_path: true
       domain: ${DOMAIN}
       root_url: https://${DOMAIN}/grafana
+
     auth:
       disable_login_form: false
       oauth_auto_login: false
       login_maximum_inactive_lifetime_duration: 7d
       login_maximum_lifetime_duration: 30d
+
     security:
       cookie_secure: true
       disable_gravatar: true
@@ -214,13 +153,16 @@ grafana:
       strict_transport_security_subdomains: true
       x_content_type_options: true
       x_xss_protection: true
+
     users:
       allow_sign_up: false
       auto_assign_org: true
       auto_assign_org_role: Viewer
+
     analytics:
       reporting_enabled: false
       check_for_updates: false
+
     auth.generic_oauth:
       enabled: true
       name: Keycloak
@@ -232,17 +174,39 @@ grafana:
       token_url: https://${DOMAIN}/auth/realms/microservices/protocol/openid-connect/token
       api_url: https://${DOMAIN}/auth/realms/microservices/protocol/openid-connect/userinfo
       role_attribute_path: contains(roles[*], 'admin') && 'Admin' || contains(roles[*], 'editor') && 'Editor' || 'Viewer'
+
+    # Unified alerting configuration
     unified_alerting:
       enabled: true
+      alertmanagers:
+        alertmanager:
+          name: AlertManager
+          type: alertmanager
+          uid: alertmanager
+          url: http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093
+          access: proxy
+          implementation: prometheus
+          handleGrafanaManagedAlerts: true
+
+    # Disable legacy alerting
     alerting:
       enabled: false
+
+    alerting_ui:
+      views:
+        rules:
+          folders: "folder"
+
     metrics:
       enabled: true
+
     database:
       wal: true
+
     log:
       mode: console
       level: info
+
     smtp:
       enabled: true
       host: smtp.gmail.com:587
@@ -250,30 +214,52 @@ grafana:
       from_address: alertmanager@monitoring.local
       from_name: Grafana Alert
       startTLS_policy: MandatoryStartTLS
+
+  # Persistence configuration
   persistence:
     enabled: true
     storageClassName: "managed-csi"
     size: 5Gi
+
+  # Data sources configuration
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Alertmanager
+          type: alertmanager
+          url: http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093
+          access: proxy
+          isDefault: false
+          uid: alertmanager
+          jsonData:
+            implementation: prometheus
+            handleGrafanaManagedAlerts: true
+            manageAlerts: true
+        - name: Loki
+          type: loki
+          url: http://loki-gateway.monitoring.svc.cluster.local/loki
+          access: proxy
+          isDefault: true
+          uid: Loki
+          jsonData:
+            timeout: 30
+            maxLines: 1000
+            alerting: true
+            manageAlerts: true
+            derivedFields:
+              - datasourceUid: Loki
+                matcherRegex: traceID=(\w+)
+                name: TraceID
+                url: https://${DOMAIN}/grafana/explore?orgId=1&left=%5B%22now-1h%22,%22now%22,%22Loki%22,%7B%22expr%22:%22%7Btracing%7D%20|%20json%20|%20traceID%3D%5C%22$$value%5C%22%22%7D%5D
+          basicAuth: true
+          basicAuthUser: promtail
+
+  # Dashboard providers configuration
   dashboardProviders:
     dashboardproviders.yaml:
       apiVersion: 1
       providers:
-        - name: 'default'
-          orgId: 1
-          folder: ''
-          type: file
-          disableDeletion: false
-          editable: true
-          options:
-            path: /var/lib/grafana/dashboards/default
-        - name: 'kubernetes'
-          orgId: 1
-          folder: 'Kubernetes'
-          type: file
-          disableDeletion: false
-          editable: true
-          options:
-            path: /var/lib/grafana/dashboards/kubernetes
         - name: 'monitoring'
           orgId: 1
           folder: 'Monitoring'
@@ -282,40 +268,83 @@ grafana:
           editable: true
           options:
             path: /var/lib/grafana/dashboards/monitoring
+
+  # Alertmanager configuration
+  alerting:
+    alertmanagers:
+      alertmanager:
+        name: AlertManager
+        orgId: 1
+        type: prometheus
+        uid: alertmanager
+        url: http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093
+        access: proxy
+        handleGrafanaManagedAlerts: true
+        implementation: prometheus
+
+  # Provisioning configuration
+  provisioning:
+    alerting:
+      rules_dir: /etc/grafana/provisioning/alerting/rules
+      contactpoints_dir: /etc/grafana/provisioning/alerting/contactpoints
+
+  # Volume configurations
+  extraVolumeMounts:
+    - name: grafana-alert-rules
+      mountPath: /etc/grafana/provisioning/alerting/rules
+    - name: grafana-contact-points
+      mountPath: /etc/grafana/provisioning/alerting/contactpoints
+
+  extraVolumes:
+    - name: grafana-alert-rules
+      configMap:
+        name: grafana-alert-rules
+    - name: grafana-contact-points
+      configMap:
+        name: grafana-contact-points
+
+  # Dashboards configuration
   dashboards:
     default:
-      kubernetes-cluster:
-        gnetId: 19329
-        revision: 2
-        datasource: Prometheus
-      node-exporter:
-        gnetId: 19004
-        revision: 2
-        datasource: Prometheus
-      microservices-logs:
-        file: /var/lib/grafana/dashboards/default/microservices-logs.json
-    kubernetes:
-      k8s-views-global:
-        gnetId: 19401
-        revision: 2
-        datasource: Prometheus
-      k8s-views-pods:
-        gnetId: 19400
-        revision: 2
-        datasource: Prometheus
-    monitoring:
-      prometheus-stats:
-        gnetId: 19105
-        revision: 2
-        datasource: Prometheus
-      alertmanager:
-        gnetId: 19313
-        revision: 2
-        datasource: Prometheus
       loki-logs:
-        gnetId: 18281
+        file: /var/lib/grafana/dashboards/default/loki-logs.json
+    monitoring:
+      k8s-views-global:
+        gnetId: 15757
+        revision: 43
+        datasource: Prometheus
+      loki:
+        gnetId: 13639
         revision: 2
         datasource: Loki
+      keycloak:
+        gnetId: 10441
+        revision: 2
+        datasource: Prometheus
+      prometheus-stats:
+        gnetId: 15760
+        revision: 36
+        datasource: Prometheus
+      cert-manager:
+        gnetId: 11001
+        revision: 1
+        datasource: Prometheus
+      alert-manager:
+        gnetId: 9578
+        revision: 4
+        datasource: Prometheus
+      postgres:
+        gnetId: 9628
+        revision: 8
+        datasource: Prometheus
+      coredns:
+        gnetId: 14981
+        revision: 2
+        datasource: Prometheus
+      persistent-volumes:
+        gnetId: 20066
+        revision: 2
+        datasource: Prometheus
 
 defaultRules:
   create: true

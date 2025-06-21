@@ -243,6 +243,19 @@ resource "helm_release" "keycloak" {
     extraVolumeMounts:
       - name: realm-config
         mountPath: /opt/bitnami/keycloak/data/import
+
+    customLivenessProbe:
+      httpGet:
+        path: /auth/realms/master
+        port: http
+      initialDelaySeconds: 300
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+      successThreshold: 1
+
+    livenessProbe:
+      enabled: false
     EOT
   ]
 }

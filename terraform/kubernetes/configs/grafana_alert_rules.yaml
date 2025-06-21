@@ -1,0 +1,154 @@
+apiVersion: 1
+groups:
+  - name: System Alerts
+    folder: System
+    interval: 60s
+    rules:
+      - name: High CPU Usage
+        uid: high_cpu_usage
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: Prometheus
+            model:
+              editorMode: code
+              expr: sum(rate(node_cpu_seconds_total{mode!="idle"}[5m])) by (instance) / sum(rate(node_cpu_seconds_total[5m])) by (instance) > 0.8
+              instant: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+              range: true
+          - refId: B
+            datasourceUid: Prometheus
+            model:
+              editorMode: code
+              expr: sum(rate(node_cpu_seconds_total{mode!="idle"}[5m])) by (instance) / sum(rate(node_cpu_seconds_total[5m])) by (instance) > 0.9
+              instant: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              range: true
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: []
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        annotations:
+          description: "Instance {{ $labels.instance }} has high CPU usage (> 80%) for more than 5 minutes."
+          summary: "High CPU usage on {{ $labels.instance }}"
+        labels:
+          severity: warning
+          team: platform
+      
+      - name: Critical CPU Usage
+        uid: critical_cpu_usage
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: Prometheus
+            model:
+              editorMode: code
+              expr: sum(rate(node_cpu_seconds_total{mode!="idle"}[5m])) by (instance) / sum(rate(node_cpu_seconds_total[5m])) by (instance) > 0.95
+              instant: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+              range: true
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: []
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        annotations:
+          description: "Instance {{ $labels.instance }} has critical CPU usage (> 95%) for more than 5 minutes."
+          summary: "Critical CPU usage on {{ $labels.instance }}"
+        labels:
+          severity: critical
+          team: platform
+  
+  - name: Loki Alerts
+    folder: Logs
+    interval: 60s
+    rules:
+      - name: High Error Rate in Logs
+        uid: high_error_rate_logs
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: Loki
+            model:
+              editorMode: code
+              expr: sum(count_over_time({app="microservices"} |~ "(?i)error|exception|fail|fatal" [5m])) by (app) / sum(count_over_time({app="microservices"} [5m])) by (app) > 0.05
+              instant: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+              range: true
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: []
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        annotations:
+          description: "Application {{ $labels.app }} has a high error rate in logs (> 5%) for more than 5 minutes."
+          summary: "High error rate in logs for {{ $labels.app }}"
+        labels:
+          severity: warning
+          team: application

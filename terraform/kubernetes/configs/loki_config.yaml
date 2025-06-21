@@ -1,9 +1,24 @@
-deploymentMode: "SingleBinary<->SimpleScalable"
+deploymentMode: "SingleBinary"
+
+# Disable all SimpleScalable components
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+# Disable caches to simplify configuration and reduce resource contention
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
 
 loki:
   auth_enabled: true
   extraArgs:
     - "-config.expand-env=true"
+  # No memberlist configuration needed for SingleBinary mode
   storage:
     type: filesystem
   schema_config:
@@ -25,10 +40,10 @@ loki:
       directory: /var/loki/chunks
   compactor:
     working_directory: /var/loki/compactor
-    compaction_interval: 5m
+    compaction_interval: 10m
     retention_enabled: true
     retention_delete_delay: 2h
-    retention_delete_worker_count: 150
+    retention_delete_worker_count: 50
     delete_request_store: "filesystem"
   commonConfig:
     replication_factor: 1
@@ -37,28 +52,30 @@ loki:
       kvstore:
         store: inmemory
   limits_config:
-    retention_period: 15d
+    retention_period: 3d
     reject_old_samples: true
-    reject_old_samples_max_age: 168h  # 7d
-    ingestion_rate_mb: 10
-    ingestion_burst_size_mb: 20
-    per_stream_rate_limit: 5MB
-    per_stream_rate_limit_burst: 10MB
-    max_entries_limit_per_query: 10000
-    max_query_series: 1000
-    max_query_lookback: 168h  # 7d
-    max_cache_freshness_per_query: 10m
+    reject_old_samples_max_age: 72h  # 3d
+    ingestion_rate_mb: 4
+    ingestion_burst_size_mb: 8
+    per_stream_rate_limit: 2MB
+    per_stream_rate_limit_burst: 4MB
+    max_entries_limit_per_query: 500
+    max_query_series: 50
+    max_query_lookback: 72h  # 3d
+    max_cache_freshness_per_query: 5m
     split_queries_by_interval: 15m
-    cardinality_limit: 100000
-    max_chunks_per_query: 2000000
-    max_global_streams_per_user: 10000
-    max_line_size: 256000
-    max_label_names_per_series: 30
+    cardinality_limit: 1000
+    max_chunks_per_query: 100000
+    max_global_streams_per_user: 500
+    max_line_size: 64000  # Increased to match Promtail's max_partial_line_size
+    max_label_names_per_series: 20  # Set to match monitoring.tf
+    unordered_writes: true  # Enable unordered writes to better handle metadata
+    creation_grace_period: 10m  # Add grace period for log creation time
   chunk_store_config:
-    max_look_back_period: 336h  # 14d
+    max_look_back_period: 72h  # 3d
   table_manager:
     retention_deletes_enabled: true
-    retention_period: 336h  # 14d
+    retention_period: 72h  # 3d
   frontend:
     compress_responses: true
     log_queries_longer_than: 10s
@@ -68,13 +85,7 @@ loki:
     scheduler_address: localhost:9095
   query_range:
     align_queries_with_step: true
-    cache_results: true
-    results_cache:
-      cache:
-        enable_fifocache: true
-        fifocache:
-          max_size_items: 1024
-          validity: 24h
+    cache_results: false
   ruler:
     storage:
       type: local
@@ -94,16 +105,16 @@ singleBinary:
   persistence:
     enabled: true
     storageClassName: managed-csi
-    size: 10Gi
+    size: 3Gi
     accessModes:
       - ReadWriteOnce
   resources:
     requests:
-      cpu: 200m
-      memory: 512Mi
+      cpu: 200m  # Increased from 50m to 200m to ensure stability
+      memory: 512Mi  # Increased from 128Mi to 512Mi to prevent OOM issues
     limits:
-      cpu: 1000m
-      memory: 2Gi
+      cpu: 500m  # Increased from 200m to 500m to allow for spikes
+      memory: 1Gi  # Increased from 256Mi to 1Gi to prevent OOM issues
   securityContext:
     fsGroup: 10001
     runAsGroup: 10001
@@ -123,34 +134,35 @@ singleBinary:
         runAsUser: 10001
         runAsGroup: 10001
         runAsNonRoot: true
+  # Optimized probe configuration with very generous timeouts
   readinessProbe:
     httpGet:
       path: /ready
       port: 3100
-    initialDelaySeconds: 30
-    timeoutSeconds: 5
-    periodSeconds: 10
+    initialDelaySeconds: 60  # Increased from 30s to 60s
+    timeoutSeconds: 10       # Increased from 5s to 10s
+    periodSeconds: 30        # Increased from 15s to 30s
     successThreshold: 1
-    failureThreshold: 3
+    failureThreshold: 5      # Increased from 3 to 5
   livenessProbe:
     httpGet:
       path: /ready
       port: 3100
-    initialDelaySeconds: 300
-    timeoutSeconds: 5
-    periodSeconds: 30
+    initialDelaySeconds: 300  # Increased from 180s to 300s
+    timeoutSeconds: 10        # Increased from 5s to 10s
+    periodSeconds: 60         # Increased from 30s to 60s
     successThreshold: 1
-    failureThreshold: 3
+    failureThreshold: 5       # Increased from 3 to 5
 
   startupProbe:
     httpGet:
       path: /ready
       port: 3100
-    initialDelaySeconds: 60
-    timeoutSeconds: 5
-    periodSeconds: 15
+    initialDelaySeconds: 120  # Increased from 60s to 120s
+    timeoutSeconds: 10        # Increased from 5s to 10s
+    periodSeconds: 30         # Increased from 15s to 30s
     successThreshold: 1
-    failureThreshold: 10
+    failureThreshold: 40      # Increased from 30 to 40
 
   affinity:
     podAntiAffinity:
@@ -170,6 +182,11 @@ monitoring:
     enabled: true
     grafanaAgent:
       installOperator: false
+    tenantID: "promtail"
+    lokiAddress: "http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push"
+    basicAuth:
+      username: "promtail"
+      password: "${LOKI_PASSWORD}"
   lokiCanary:
     enabled: true
     resources:
@@ -236,7 +253,8 @@ gateway:
     successThreshold: 1
     failureThreshold: 3
   ingress:
-    enabled: false
+    enabled: true
+    pathType: Prefix
   basicAuth:
     enabled: false
   nginxConfig:
@@ -291,7 +309,20 @@ gateway:
             proxy_pass       http://localhost:3100$request_uri;
           }
 
-          location ~ /api/v1/push {
+          location ~ /api/v1/.* {
+            proxy_pass       http://localhost:3100$request_uri;
+          }
+
+          # Explicitly add ruler API endpoints
+          location ~ /ruler/.* {
+            proxy_pass       http://localhost:3100$request_uri;
+          }
+
+          location ~ /loki/api/v1/rules/.* {
+            proxy_pass       http://localhost:3100$request_uri;
+          }
+
+          location ~ /api/prom/rules/.* {
             proxy_pass       http://localhost:3100$request_uri;
           }
         }

@@ -9,6 +9,19 @@ resource "kubernetes_namespace_v1" "monitoring" {
   }
 }
 
+resource "kubernetes_secret_v1" "alertmanager_config" {
+  metadata {
+    name      = "alertmanager-config"
+    namespace = kubernetes_namespace_v1.monitoring.metadata[0].name
+  }
+
+  data = {
+    "alertmanager.yaml" = templatefile("${path.root}/configs/alertmanager_config.yaml", {
+      SMTP_AUTH_PASSWORD = random_password.grafana_password.result
+    })
+  }
+}
+
 resource "random_password" "grafana_password" {
   length = 16
 }
@@ -87,10 +100,16 @@ resource "helm_release" "kube-prometheus" {
   force_update = true
   replace      = true
   recreate_pods = true
+  depends_on = [kubernetes_config_map_v1.grafana_alert_rules, kubernetes_config_map_v1.grafana_contact_points]
 
   set_sensitive {
     name  = "grafana.adminPassword"
     value = random_password.grafana_password.result
+  }
+
+  set_sensitive {
+    name  = "grafana.datasources.datasources\\.yaml.datasources[1].secureJsonData.basicAuthPassword"
+    value = random_password.loki_password.result
   }
 
   set {
@@ -200,7 +219,7 @@ resource "helm_release" "kube-prometheus" {
 
   set {
     name  = "grafana.image.tag"
-    value = "10.4.4"
+    value = "10.4.5"
   }
 
   set {
@@ -236,7 +255,7 @@ resource "helm_release" "loki" {
   repository = "https://grafana.github.io/helm-charts"
   chart      = "loki"
   depends_on = [helm_release.kube-prometheus, helm_release.grafana-agent-operator, kubernetes_secret_v1.loki_auth_secret]
-  timeout    = 300
+  timeout    = 600
   values     = [file("${path.root}/configs/loki_config.yaml")]
   force_update = true
   replace      = true
@@ -258,32 +277,6 @@ resource "helm_release" "loki" {
   }
 
   set {
-    name  = "singleBinary.replicas"
-    value = var.loki_replicas
-  }
-
-  set {
-    name  = "singleBinary.resources.requests.memory"
-    value = var.loki_resources_requests_memory
-  }
-
-  set {
-    name  = "singleBinary.resources.requests.cpu"
-    value = var.loki_resources_requests_cpu
-  }
-
-  set {
-    name  = "singleBinary.resources.limits.memory"
-    value = var.loki_resources_limits_memory
-  }
-
-  set {
-    name  = "singleBinary.resources.limits.cpu"
-    value = var.loki_resources_limits_cpu
-  }
-
-
-  set {
     name  = "loki.auth_enabled"
     value = "true"
   }
@@ -294,13 +287,123 @@ resource "helm_release" "loki" {
   }
 
   set {
+    name  = "loki.limits_config.max_label_names_per_series"
+    value = "20"
+  }
+
+  set {
+    name  = "loki.commonConfig.ring.kvstore.store"
+    value = "inmemory"
+  }
+
+  set {
+    name  = "loki.ruler.ring.kvstore.store"
+    value = "inmemory"
+  }
+
+  set {
+    name  = "singleBinary.resources.requests.cpu"
+    value = "200m"
+  }
+
+  set {
+    name  = "singleBinary.resources.requests.memory"
+    value = "512Mi"
+  }
+
+  set {
+    name  = "singleBinary.resources.limits.cpu"
+    value = "500m"
+  }
+
+  set {
+    name  = "singleBinary.resources.limits.memory"
+    value = "1Gi"
+  }
+
+  set {
+    name  = "singleBinary.persistence.size"
+    value = "3Gi"
+  }
+
+  set {
+    name  = "singleBinary.readinessProbe.initialDelaySeconds"
+    value = "60"
+  }
+
+  set {
+    name  = "singleBinary.readinessProbe.timeoutSeconds"
+    value = "10"
+  }
+
+  set {
+    name  = "singleBinary.readinessProbe.periodSeconds"
+    value = "30"
+  }
+
+  set {
+    name  = "singleBinary.readinessProbe.failureThreshold"
+    value = "5"
+  }
+
+  set {
+    name  = "singleBinary.livenessProbe.initialDelaySeconds"
+    value = "300"
+  }
+
+  set {
+    name  = "singleBinary.livenessProbe.timeoutSeconds"
+    value = "10"
+  }
+
+  set {
+    name  = "singleBinary.livenessProbe.periodSeconds"
+    value = "60"
+  }
+
+  set {
+    name  = "singleBinary.livenessProbe.failureThreshold"
+    value = "5"
+  }
+
+  set {
+    name  = "singleBinary.startupProbe.initialDelaySeconds"
+    value = "120"
+  }
+
+  set {
+    name  = "singleBinary.startupProbe.timeoutSeconds"
+    value = "10"
+  }
+
+  set {
+    name  = "singleBinary.startupProbe.periodSeconds"
+    value = "30"
+  }
+
+  set {
+    name  = "singleBinary.startupProbe.failureThreshold"
+    value = "40"
+  }
+
+  set {
     name  = "monitoring.serviceMonitor.enabled"
     value = "true"
   }
 
   set {
     name  = "monitoring.serviceMonitor.interval"
-    value = "30s"
+    value = "15s"
+  }
+
+  set {
+    name  = "monitoring.serviceMonitor.scrapeTimeout"
+    value = "10s"
+  }
+
+  set {
+    name  = "gateway.ingress.pathType"
+    value = "Prefix"
   }
 
   set {
@@ -310,7 +413,7 @@ resource "helm_release" "loki" {
 
   set {
     name  = "monitoring.selfMonitoring.lokiCanary.enabled"
-    value = "true"
+    value = "false"
   }
 
   set {
@@ -319,57 +422,104 @@ resource "helm_release" "loki" {
   }
 
   set {
+    name  = "loki.image.tag"
+    value = "3.5.1"
+  }
+
+  set {
+    name  = "deploymentMode"
+    value = "SingleBinary"
+  }
+
+  set {
+    name  = "chunksCache.enabled"
+    value = "false"
+  }
+
+  set {
+    name  = "resultsCache.enabled"
+    value = "false"
+  }
+
+  set {
     name  = "grafana.datasources.datasources\\.yaml.apiVersion"
     value = "1"
   }
 
   set {
-    name  = "grafana.datasources.datasources\\.yaml.datasources[0].name"
+    name  = "grafana.datasources.datasources\\.yaml.datasources[1].name"
     value = "Loki"
   }
 
   set {
-    name  = "grafana.datasources.datasources\\.yaml.datasources[0].type"
+    name  = "grafana.datasources.datasources\\.yaml.datasources[1].uid"
+    value = "Loki"
+  }
+
+  set {
+    name  = "grafana.datasources.datasources\\.yaml.datasources[1].type"
     value = "loki"
   }
 
   set {
-    name  = "grafana.datasources.datasources\\.yaml.datasources[0].url"
-    value = "http://loki-gateway.monitoring.svc.cluster.local"
+    name  = "grafana.datasources.datasources\\.yaml.datasources[1].url"
+    value = "http://loki-gateway.monitoring.svc.cluster.local/loki"
   }
 
   set {
-    name  = "grafana.datasources.datasources\\.yaml.datasources[0].access"
+    name  = "grafana.datasources.datasources\\.yaml.datasources[1].access"
     value = "proxy"
   }
 
   set {
-    name  = "grafana.datasources.datasources\\.yaml.datasources[0].isDefault"
-    value = "false"
-  }
-
-  set {
-    name  = "grafana.datasources.datasources\\.yaml.datasources[0].jsonData.timeout"
-    value = "60"
-  }
-
-  set {
-    name  = "grafana.datasources.datasources\\.yaml.datasources[0].jsonData.maxLines"
-    value = "5000"
-  }
-
-  set {
-    name  = "grafana.datasources.datasources\\.yaml.datasources[0].basicAuth"
+    name  = "grafana.datasources.datasources\\.yaml.datasources[1].isDefault"
     value = "true"
   }
 
   set {
-    name  = "grafana.datasources.datasources\\.yaml.datasources[0].basicAuthUser"
+    name  = "grafana.datasources.datasources\\.yaml.datasources[1].jsonData.timeout"
+    value = "30"
+  }
+
+  set {
+    name  = "grafana.datasources.datasources\\.yaml.datasources[1].jsonData.maxLines"
+    value = "1000"
+  }
+
+  # set {
+  #   name  = "grafana.datasources.datasources\\.yaml.datasources[1].jsonData.derivedFields"
+  #   value = jsonencode([
+  #     {
+  #       datasourceUid = "Loki"
+  #       matcherRegex = "traceID=(\\w+)"
+  #       name = "TraceID"
+  #       url = "https://${local.current_domain}/grafana/explore?orgId=1&left=%5B%22now-1h%22,%22now%22,%22Loki%22,%7B%22expr%22:%22%7Btracing%7D%20|%20json%20|%20traceID%3D%5C%22$$value%5C%22%22%7D%5D"
+  #     }
+  #   ])
+  # }
+
+  set {
+    name  = "grafana.datasources.datasources\\.yaml.datasources[1].jsonData.alerting"
+    value = "true"
+  }
+
+  set {
+    name  = "grafana.datasources.datasources\\.yaml.datasources[1].jsonData.manageAlerts"
+    value = "true"
+  }
+
+  set {
+    name  = "grafana.datasources.datasources\\.yaml.datasources[1].basicAuth"
+    value = "true"
+  }
+
+  set {
+    name  = "grafana.datasources.datasources\\.yaml.datasources[1].basicAuthUser"
     value = "promtail"
   }
 
   set_sensitive {
-    name  = "grafana.datasources.datasources\\.yaml.datasources[0].basicAuthPassword"
+    name  = "grafana.datasources.datasources\\.yaml.datasources[1].basicAuthPassword"
     value = random_password.loki_password.result
   }
 }
@@ -420,13 +570,38 @@ resource "kubernetes_config_map_v1" "grafana_dashboards" {
   }
 
   data = {
-    "microservices-logs.json" = file("${path.root}/configs/microservices_logs_dashboard.json")
-    "microservices-metrics.json" = file("${path.root}/configs/microservices_metrics_dashboard.json")
-    "microservices-health.json"  = file("${path.root}/configs/microservices_health_dashboard.json")
-    "system-overview.json"      = file("${path.root}/configs/system_overview_dashboard.json")
+    "loki-logs.json" = file("${path.root}/configs/loki-logs.json")
   }
 
   depends_on = [helm_release.kube-prometheus]
+}
+
+resource "kubernetes_config_map_v1" "grafana_alert_rules" {
+  metadata {
+    name      = "grafana-alert-rules"
+    namespace = kubernetes_namespace_v1.monitoring.metadata[0].name
+    labels = {
+      grafana_alert_rules = "1"
+    }
+  }
+
+  data = {
+    "alert-rules.yaml" = file("${path.root}/configs/grafana_alert_rules.yaml")
+  }
+}
+
+resource "kubernetes_config_map_v1" "grafana_contact_points" {
+  metadata {
+    name      = "grafana-contact-points"
+    namespace = kubernetes_namespace_v1.monitoring.metadata[0].name
+    labels = {
+      grafana_contact_points = "1"
+    }
+  }
+
+  data = {
+    "contact-points.yaml" = file("${path.root}/configs/grafana_contact_points.yaml")
+  }
 }
 
 resource "kubernetes_config_map_v1" "microservices_alerts" {
@@ -537,4 +712,47 @@ resource "kubernetes_config_map_v1" "microservices_alerts" {
   }
 
   depends_on = [helm_release.kube-prometheus]
+}
+
+resource "kubernetes_ingress_v1" "ingress_loki" {
+  metadata {
+    name      = "loki-ingress"
+    namespace = kubernetes_namespace_v1.monitoring.metadata[0].name
+    annotations = {
+      "cert-manager.io/cluster-issuer"                 = var.cluster_issuer
+      "kubernetes.io/ingress.class"                    = "nginx"
+      "nginx.ingress.kubernetes.io/proxy-body-size"    = "20m"
+      "acme.cert-manager.io/http01-edit-in-place"      = "true"
+      "nginx.ingress.kubernetes.io/force-ssl-redirect" = "true"
+      "nginx.ingress.kubernetes.io/ssl-redirect"       = "true"
+      "nginx.ingress.kubernetes.io/backend-protocol"   = "HTTP"
+      "nginx.ingress.kubernetes.io/use-forwarded-headers" = "true"
+    }
+  }
+  depends_on = [helm_release.nginx-ingress, helm_release.cert_manager, helm_release.loki]
+
+  spec {
+    tls {
+      hosts       = [local.current_domain]
+      secret_name = "tls-secret-loki"
+    }
+
+    rule {
+      host = local.current_domain
+      http {
+        path {
+          path_type = "Prefix"
+          path      = "/loki"
+          backend {
+            service {
+              name = "loki-gateway"
+              port {
+                number = 80
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 }

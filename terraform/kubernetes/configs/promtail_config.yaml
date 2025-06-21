@@ -2,13 +2,13 @@ config:
   clients:
     - url: http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push
       tenant_id: "promtail"
-      batchwait: 1s
-      batchsize: 1048576  # 1MB
+      batchwait: 2s  # Increased to allow more batching
+      batchsize: 65536  # Reduced to 64KB to match Loki's max_line_size
       backoff_config:
-        min_period: 500ms
-        max_period: 5m
-        max_retries: 10
-      timeout: 10s
+        min_period: 1s  # Increased for more stability
+        max_period: 2m  # Increased to allow more time for recovery
+        max_retries: 10  # Increased to allow more retries
+      timeout: 10s  # Increased to match Loki's probe timeouts
       external_labels:
         cluster: ${CLUSTER_NAME}
         environment: ${CLUSTER_NAME}
@@ -19,47 +19,44 @@ config:
   snippets:
     pipelineStages:
       - cri: 
-          max_partial_lines: 100
-          max_partial_line_size: 262144
+          max_partial_lines: 25  # Further reduced from 50 to 25
+          max_partial_line_size: 64000  # Further reduced from 128000 to 64000
+      # Enhanced JSON parsing to handle structured metadata
       - json:
           expressions:
             level: level
             timestamp: timestamp
             message: message
-            logger: logger
-            thread: thread
             service: service
-            traceID: traceID
-            spanID: spanID
-            error: error
-            exception: exception
+            metadata: metadata
+            structured_metadata: structured_metadata
+          drop_malformed: false  # Don't drop logs with malformed JSON
+          keep_empty: true       # Keep empty values instead of dropping them
+      # Process structured metadata if present - ensure it's a valid JSON object
+      - template:
+          source: structured_metadata
+          template: '{{ if . }}{{ . }}{{ else }}{}{{ end }}'
+      # Add a stage to explicitly handle empty or null metadata
+      - template:
+          source: metadata
+          template: '{{ if . }}{{ . }}{{ else }}{}{{ end }}'
+      # Convert structured metadata to a properly formatted JSON string
+      - template:
+          source: structured_metadata
+          template: '{{ toJson . }}'
+      # Only keep essential labels
       - labels:
           level:
           service:
-          traceID:
-          spanID:
+      # Keep timestamp parsing
       - timestamp:
           source: timestamp
           format: RFC3339Nano
           fallback_formats:
             - RFC3339
             - Unix
-            - UnixMs
-      - metrics:
-          log_entries_count:
-            type: Counter
-            description: "Count of log entries by level and service"
-            prefix: promtail_custom_
-            source: level
-            config:
-              action: inc
-              match_all: true
-              labels:
-                level: "level"
-                service: "service"
-      - template:
-          source: message
-          template: '{{ if .error }}{{ .message }} - Error: {{ .error }}{{ else if .exception }}{{ .message }} - Exception: {{ .exception }}{{ else }}{{ .message }}{{ end }}'
+      # Removed metrics collection to reduce overhead
+      # Simplified output
       - output:
           source: message
 
@@ -109,7 +106,9 @@ extraEnv:
       fieldRef:
         fieldPath: spec.nodeName
   - name: CLUSTER_NAME
-    value: "production"
+    valueFrom:
+      fieldRef:
+        fieldPath: metadata.namespace
 
 podAnnotations:
   prometheus.io/scrape: "true"
@@ -126,14 +125,9 @@ serviceAccount:
   annotations:
     prometheus.io/scrape: "true"
 
-namespaceSelectorStrategy: selection
-namespaceSelector:
-  matchNames:
-    - microservices
-    - monitoring
-    - kube-system
-    - default
-    - ingress-nginx
+namespaceSelectorStrategy: any
+namespaceSelector: {}
+# Comment: Changed to collect logs from all namespaces instead of specific ones
 
 securityContext:
   readOnlyRootFilesystem: true

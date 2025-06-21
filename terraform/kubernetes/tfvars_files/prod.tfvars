@@ -74,7 +74,7 @@ loki_storage_size                      = "10Gi"
 keycloak_replicas                      = 1
 keycloak_resources_requests_memory     = "192Mi"
 keycloak_resources_requests_cpu        = "200m"
-keycloak_resources_limits_memory       = "384Mi"
+keycloak_resources_limits_memory       = "768Mi"
 keycloak_resources_limits_cpu          = "600m"
 
 argocd_server_replicas                 = 1
