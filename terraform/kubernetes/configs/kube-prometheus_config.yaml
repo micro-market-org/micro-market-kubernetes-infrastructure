@@ -4,9 +4,9 @@ prometheus:
     evaluationInterval: "30s"
     scrapeInterval: "30s"
     serviceMonitorSelectorNilUsesHelmValues: false
-    serviceMonitorSelector: {}
+    serviceMonitorSelector: { }
     podMonitorSelectorNilUsesHelmValues: false
-    podMonitorSelector: {}
+    podMonitorSelector: { }
     walCompression: true
     enableAdminAPI: false
     externalUrl: /prometheus
@@ -14,7 +14,7 @@ prometheus:
       volumeClaimTemplate:
         spec:
           storageClassName: "managed-csi"
-          accessModes: ["ReadWriteOnce"]
+          accessModes: [ "ReadWriteOnce" ]
           resources:
             requests:
               storage: 10Gi
@@ -46,7 +46,7 @@ alertmanager:
       volumeClaimTemplate:
         spec:
           storageClassName: "managed-csi"
-          accessModes: ["ReadWriteOnce"]
+          accessModes: [ "ReadWriteOnce" ]
           resources:
             requests:
               storage: 2Gi
@@ -165,17 +165,13 @@ grafana:
       enabled: true
       name: Keycloak
       allow_sign_up: true
-      allow_assign_grafana_admin: true
       client_id: grafana
-      email_attribute_path: email
-      login_attribute_path: username
-      name_attribute_path: full_name
       client_secret: ${GRAFANA_OIDC_CLIENT_SECRET}
-      scopes: openid email profile offline_access roles
+      scopes: openid profile email
       auth_url: https://${DOMAIN}/auth/realms/microservices/protocol/openid-connect/auth
       token_url: https://${DOMAIN}/auth/realms/microservices/protocol/openid-connect/token
       api_url: https://${DOMAIN}/auth/realms/microservices/protocol/openid-connect/userinfo
-      role_attribute_path: contains(roles[*], 'admin') && 'Admin' || contains(roles[*], 'editor') && 'Editor' || 'Admin'
+      role_attribute_path: contains(roles[*], 'admin') && 'Admin' || contains(roles[*], 'editor') && 'Editor' || 'Viewer'
 
     unified_alerting:
       enabled: true
