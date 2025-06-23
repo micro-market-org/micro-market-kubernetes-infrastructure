@@ -13,6 +13,7 @@ spec:
                   registry: ${REGISTRY}
                   provider: ${PROVIDER}
                   project: ${PROJECT_NAME}
+                  domain: ${DOMAIN}
           - list:
               elements:
                 - name: catalog
@@ -46,15 +47,15 @@ spec:
             - name: image.repository
               value: '{{registry}}/{{project}}/{{name}}'
             - name: global.domain
-              value: '{{project}}.westeurope.cloudapp.azure.com'
+              value: '{{domain}}'
             - name: ingress.hosts[0].host
-              value: '{{project}}.westeurope.cloudapp.azure.com'
+              value: '{{domain}}'
             - name: ingress.tls[0].hosts[0]
-              value: '{{project}}.westeurope.cloudapp.azure.com'
+              value: '{{domain}}'
             - name: configMaps.micro-market-frontend-config.data.NEXT_PUBLIC_KEYCLOAK_URL
-              value: 'https://{{project}}.westeurope.cloudapp.azure.com/auth'
+              value: '{{domain}}/auth'
             - name: configMaps.micro-market-frontend-config.data.NEXT_PUBLIC_API_URL
-              value: 'https://{{project}}.westeurope.cloudapp.azure.com'
+              value: 'https://{{domain}}'
       destination:
         server: https://kubernetes.default.svc
         namespace: 'microservices'

@@ -2,7 +2,7 @@ variable "cloud_provider" {
   type        = string
   description = "The cloud provider to use (azure, gcp, or aws)"
   validation {
-    condition     = contains(["azure", "gcp", "aws"], var.cloud_provider)
+    condition = contains(["azure", "gcp", "aws"], var.cloud_provider)
     error_message = "The cloud_provider value must be 'azure', 'gcp', or 'aws'."
   }
 }
@@ -283,7 +283,6 @@ variable "cert_manager_cainjector_resources_limits_memory" {
   default     = "100Mi"
 }
 
-# NGINX Ingress variables
 variable "nginx_ingress_replicas" {
   description = "Number of NGINX Ingress replicas"
   type        = number
@@ -332,7 +331,6 @@ variable "nginx_ingress_resources_limits_memory" {
   default     = "400Mi"
 }
 
-# PostgreSQL variables
 variable "postgresql_architecture" {
   description = "PostgreSQL architecture (standalone or replication)"
   type        = string
@@ -525,43 +523,6 @@ variable "grafana_storage_size" {
   default     = "5Gi"
 }
 
-variable "loki_replicas" {
-  description = "Number of Loki replicas"
-  type        = number
-  default     = 1
-}
-
-variable "loki_resources_requests_memory" {
-  description = "Memory requests for Loki"
-  type        = string
-  default     = "400Mi"
-}
-
-variable "loki_resources_requests_cpu" {
-  description = "CPU requests for Loki"
-  type        = string
-  default     = "150m"
-}
-
-variable "loki_resources_limits_memory" {
-  description = "Memory limits for Loki"
-  type        = string
-  default     = "800Mi"
-}
-
-variable "loki_resources_limits_cpu" {
-  description = "CPU limits for Loki"
-  type        = string
-  default     = "400m"
-}
-
-variable "loki_storage_size" {
-  description = "Storage size for Loki"
-  type        = string
-  default     = "10Gi"
-}
-
-# Keycloak variables
 variable "keycloak_replicas" {
   description = "Number of Keycloak replicas"
   type        = number
@@ -592,7 +553,6 @@ variable "keycloak_resources_limits_cpu" {
   default     = "800m"
 }
 
-# ArgoCD variables
 variable "argocd_server_replicas" {
   description = "Number of ArgoCD server replicas"
   type        = number
@@ -689,32 +649,6 @@ variable "argocd_redis_resources_requests_cpu" {
   default     = "40m"
 }
 
-# Grafana Agent Operator variables
-variable "grafana_agent_operator_resources_requests_memory" {
-  description = "Memory requests for Grafana Agent Operator"
-  type        = string
-  default     = "100Mi"
-}
-
-variable "grafana_agent_operator_resources_requests_cpu" {
-  description = "CPU requests for Grafana Agent Operator"
-  type        = string
-  default     = "80m"
-}
-
-variable "grafana_agent_operator_resources_limits_memory" {
-  description = "Memory limits for Grafana Agent Operator"
-  type        = string
-  default     = "200Mi"
-}
-
-variable "grafana_agent_operator_resources_limits_cpu" {
-  description = "CPU limits for Grafana Agent Operator"
-  type        = string
-  default     = "160m"
-}
-
-# PostgreSQL metrics variables
 variable "postgresql_metrics_resources_requests_memory" {
   description = "Memory requests for PostgreSQL metrics"
   type        = string
@@ -737,4 +671,10 @@ variable "postgresql_metrics_resources_limits_cpu" {
   description = "CPU limits for PostgreSQL metrics"
   type        = string
   default     = "80m"
+}
+
+variable "real_domain" {
+  description = "The real domain to use for the cluster"
+  type        = string
+  default     = "micro-market.cloud"
 }

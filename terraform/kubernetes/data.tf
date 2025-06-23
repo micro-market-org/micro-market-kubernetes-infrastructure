@@ -1,5 +1,6 @@
 locals {
   current_domain = (
+    var.real_domain != null && var.real_domain != "" ? var.real_domain :
     var.cloud_provider == "azure" ? "${var.project_name}.${var.azure_region}.cloudapp.azure.com" :
     var.cloud_provider == "gcp" ? data.terraform_remote_state.gcp[0].outputs.cluster_endpoint :
     var.cloud_provider == "aws" ? data.terraform_remote_state.aws[0].outputs.eks_cluster_endpoint :
