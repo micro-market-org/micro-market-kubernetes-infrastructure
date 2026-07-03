@@ -4,6 +4,7 @@
 
 # Cloud-specific backend override generated at init time (see backends/)
 backend_override.tf
+.terraformrc-empty
 
 # Terraform state and plans — never commit
 *.tfstate

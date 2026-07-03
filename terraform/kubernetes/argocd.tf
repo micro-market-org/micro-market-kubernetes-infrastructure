@@ -47,12 +47,11 @@ resource "helm_release" "argocd" {
   chart            = "argo-cd"
   version          = "8.0.15"
   namespace        = kubernetes_namespace_v1.argocd.metadata[0].name
-  depends_on       = [helm_release.cert_manager]
   create_namespace = false
   values = [
     templatefile("${path.root}/configs/argocd_config.yaml.template", {
       ARGOCD_URL                      = "https://${local.argocd_domain}/argocd",
-      KEYCLOAK_ISSUER                 = "https://${local.argocd_domain}/auth/realms/microservices",
+      KEYCLOAK_ISSUER                 = "https://${local.auth_domain}/auth/realms/microservices",
       DOMAIN                          = local.argocd_domain,
       CLUSTER_ISSUER                  = var.cluster_issuer,
       ARGOCD_SERVER_REPLICAS          = var.argocd_server_replicas,
@@ -101,8 +100,23 @@ resource "helm_release" "argocd" {
   }
 
   set_sensitive {
+    name  = "configs.credentialTemplates.platform-gitops.password"
+    value = var.gitlab_token
+  }
+
+  set {
+    name  = "configs.credentialTemplates.platform-gitops.username"
+    value = var.gitlab_username
+  }
+
+  set {
+    name  = "configs.credentialTemplates.platform-gitops.url"
+    value = trimsuffix(var.argocd_platform_repo_url, "/platform-gitops.git")
+  }
+
+  set_sensitive {
     name  = "configs.secret.extra.argo-oidc-client-secret"
-    value = random_password.argo_oidc_client_secret.result
+    value = local.argocd_oidc_client_secret
   }
 
   set_sensitive {

@@ -19,14 +19,6 @@ cert_manager_cainjector_resources_requests_memory = "64Mi"
 cert_manager_cainjector_resources_limits_cpu      = "100m"
 cert_manager_cainjector_resources_limits_memory   = "128Mi"
 
-nginx_ingress_replicas                  = 1
-nginx_ingress_autoscaling_enabled       = false
-nginx_ingress_min_replicas              = 1
-nginx_ingress_max_replicas              = 3
-nginx_ingress_resources_requests_cpu    = "200m"
-nginx_ingress_resources_requests_memory = "192Mi"
-nginx_ingress_resources_limits_cpu      = "500m"
-nginx_ingress_resources_limits_memory   = "384Mi"
 
 postgresql_architecture                            = "standalone"
 postgresql_primary_storage_size                    = "10Gi"

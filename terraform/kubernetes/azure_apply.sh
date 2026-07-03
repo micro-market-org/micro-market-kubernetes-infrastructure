@@ -3,12 +3,7 @@ set -euo pipefail
 
 ENVIRONMENT="${ENVIRONMENT:-prod}"
 PROJECT_NAMESPACE="${PROJECT_NAMESPACE:-danielgherasim-microservices}"
-DOMAIN="${DOMAIN:-danielgherasim.com}"
 CLOUD_PROVIDER="${CLOUD_PROVIDER:-azure}"
-BACKEND_TYPE="azurerm"
-# ACR names are alphanumeric only — mirror infrastructure's replace(project_name, "-", "")
-CONTAINER_REGISTRY_NAME="${CONTAINER_REGISTRY_NAME:-acr$(tr -d '-' <<<"${PROJECT_NAMESPACE}")${ENVIRONMENT}.azurecr.io}"
-
 
 if [ -z "${ARM_CLIENT_ID:-}" ] || [ -z "${ARM_CLIENT_SECRET:-}" ] || [ -z "${ARM_TENANT_ID:-}" ] || [ -z "${ARM_SUBSCRIPTION_ID:-}" ]; then
   echo "Error: Azure credentials not set. Set ARM_CLIENT_ID, ARM_CLIENT_SECRET, ARM_TENANT_ID, and ARM_SUBSCRIPTION_ID." >&2
@@ -50,28 +45,6 @@ confirmation=$(echo "$confirmation" | tr '[:upper:]' '[:lower:]')
 if [[ "$confirmation" == "yes" ]]; then
   echo "=== [INFO] Applying Terraform plan ==="
   terraform apply -auto-approve tfplan
-
-  echo "=== [INFO] Applying Kubernetes configurations ==="
-  kubectl apply -f ./configs/production_issuer.yaml
-  kubectl apply -f ./configs/argocd_network_policies.yaml
-  kubectl apply -f ./configs/prometheus_recording_rules.yaml
-  kubectl apply -f ./configs/prometheus_alerting_rules.yaml
-  kubectl apply -f ./configs/argocd_project.yaml
-
-  echo "=== [INFO] Creating ArgoCD application configuration ==="
-  cat ./configs/argocd_application.yaml.template | \
-    sed "s/\${ENV}/$ENVIRONMENT/g" | \
-    sed "s/\${REGISTRY}/$CONTAINER_REGISTRY_NAME/g" | \
-    sed "s/\${PROJECT_NAME}/$PROJECT_NAMESPACE/g" | \
-    sed "s/\${DOMAIN}/$DOMAIN/g" | \
-    sed "s/\${PROVIDER}/$CLOUD_PROVIDER/g" > ./configs/argocd_application.yaml
-
-  kubectl apply -f ./configs/argocd_application.yaml
-
-  echo "=== [INFO] Updating public IP DNS name ==="
-  PUBLIC_IP_NAME=$(az network public-ip list --resource-group rg-$PROJECT_NAMESPACE-$ENVIRONMENT-aks --query "[?contains(name, 'kubernetes-')].name" -o tsv)
-  az network public-ip update --resource-group rg-$PROJECT_NAMESPACE-$ENVIRONMENT-aks --name $PUBLIC_IP_NAME --dns-name $PROJECT_NAMESPACE
-
   echo "=== [SUCCESS] Deployment completed successfully ==="
 else
   echo "=== [INFO] Deployment cancelled by user ==="

@@ -115,6 +115,21 @@ validate:
     - terraform fmt -check -diff -recursive
     - echo "Terraform validation completed successfully."
 
+# Static IaC security scan of the cluster-bootstrap root, independent of
+# CLOUD_PROVIDER and of validate's terraform init/plugins so a checkov
+# finding never blocks on an unrelated fmt/validate step and vice versa.
+# Accepted lab-scope findings would be documented with reasons in
+# .checkov.yaml / inline #checkov:skip comments - see
+# infrastructure/plans/2026-07-03-checkov-gates.md for the pattern (this root
+# currently has none).
+checkov:
+  stage: validate
+  image:
+    name: bridgecrew/checkov:latest
+    entrypoint: [ "" ]
+  script:
+    - checkov -d terraform/ --config-file .checkov.yaml --compact --quiet
+
 plan:
   stage: plan
   <<: *terraform-cache
@@ -152,49 +167,6 @@ apply:
   environment:
     name: ${WORKSPACE}
     on_stop: destroy
-
-azure_post_apply:
-  image: mcr.microsoft.com/azure-cli:latest
-  stage: apply
-  when: manual
-  needs:
-    - apply
-  rules:
-    - if: '$CLOUD_PROVIDER == "azure"'
-  before_script:
-    - apk add --no-cache curl bash sed kubectl
-    - echo "Installing kubectl for Kubernetes post-deployment configuration..."
-    - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-    - chmod +x kubectl
-    - mv kubectl /usr/local/bin/
-    - WORKSPACE=$(echo ${CI_COMMIT_REF_NAME} | tr -cd '[:alnum:]-' | tr '[:upper:]' '[:lower:]')
-    - echo "Using workspace: $WORKSPACE"
-  script:
-    - echo "Configuring Azure AKS post-deployment..."
-    - az login --service-principal -u $ARM_CLIENT_ID -p $ARM_CLIENT_SECRET --tenant $ARM_TENANT_ID
-    - az aks get-credentials --resource-group rg-$PROJECT_NAMESPACE-$WORKSPACE --name k8s-$PROJECT_NAMESPACE-$WORKSPACE
-
-    - echo "Applying Kubernetes configurations..."
-    - kubectl apply -f ${TF_ROOT}/configs/production_issuer.yaml
-    - kubectl apply -f ${TF_ROOT}/configs/argocd_network_policies.yaml
-    - kubectl apply -f ${TF_ROOT}/configs/prometheus_recording_rules.yaml
-    - kubectl apply -f ${TF_ROOT}/configs/prometheus_alerting_rules.yaml
-    - kubectl apply -f ${TF_ROOT}/configs/argocd_project.yaml
-
-    - echo "Generating and applying ArgoCD application from template..."
-    - cat ${TF_ROOT}/configs/argocd_application.yaml.template | \
-      sed "s/\${ENV}/$WORKSPACE/g" | \
-      sed "s/\${REGISTRY}/$CONTAINER_REGISTRY_NAME/g" | \
-      sed "s/\${PROJECT_NAME}/$PROJECT_NAMESPACE/g" | \
-      sed "s/\${PROVIDER}/$CLOUD_PROVIDER/g" > ${TF_ROOT}/configs/argocd_application.yaml
-
-    - kubectl apply -f ${TF_ROOT}/configs/argocd_application.yaml
-
-    - echo "Updating DNS configuration..."
-    - PUBLIC_IP_NAME=$(az network public-ip list --resource-group rg-$PROJECT_NAMESPACE-$WORKSPACE-aks --query "[?contains(name, 'kubernetes-')].name" -o tsv)
-    - az network public-ip update --resource-group rg-$PROJECT_NAMESPACE-$WORKSPACE-aks --name $PUBLIC_IP_NAME --dns-name $PROJECT_NAMESPACE
-
-    - echo "Azure AKS post-deployment configuration completed successfully."
 
 destroy:
   stage: destroy

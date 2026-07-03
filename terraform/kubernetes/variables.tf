@@ -193,6 +193,18 @@ variable "argocd_deployment_repo_url" {
   default     = "https://gitlab.com/microservices1691715/deployment.git"
 }
 
+variable "argocd_platform_repo_url" {
+  description = "Git repository URL containing platform add-on GitOps source consumed by ArgoCD"
+  type        = string
+  default     = "https://gitlab.com/microservices1691715/platform-gitops.git"
+}
+
+variable "argocd_platform_target_revision" {
+  description = "Git target revision for the platform-gitops root application"
+  type        = string
+  default     = "HEAD"
+}
+
 variable "container_registry" {
   description = "Container registry host for non-AWS image repositories. AWS uses ECR repository URLs from remote state when available."
   type        = string
@@ -325,54 +337,6 @@ variable "cert_manager_cainjector_resources_limits_memory" {
   description = "Memory limits for cert-manager cainjector"
   type        = string
   default     = "100Mi"
-}
-
-variable "nginx_ingress_replicas" {
-  description = "Number of NGINX Ingress replicas"
-  type        = number
-  default     = 1
-}
-
-variable "nginx_ingress_autoscaling_enabled" {
-  description = "Enable autoscaling for NGINX Ingress"
-  type        = bool
-  default     = false
-}
-
-variable "nginx_ingress_min_replicas" {
-  description = "Minimum number of NGINX Ingress replicas for autoscaling"
-  type        = number
-  default     = 1
-}
-
-variable "nginx_ingress_max_replicas" {
-  description = "Maximum number of NGINX Ingress replicas for autoscaling"
-  type        = number
-  default     = 3
-}
-
-variable "nginx_ingress_resources_requests_cpu" {
-  description = "CPU requests for NGINX Ingress"
-  type        = string
-  default     = "150m"
-}
-
-variable "nginx_ingress_resources_requests_memory" {
-  description = "Memory requests for NGINX Ingress"
-  type        = string
-  default     = "200Mi"
-}
-
-variable "nginx_ingress_resources_limits_cpu" {
-  description = "CPU limits for NGINX Ingress"
-  type        = string
-  default     = "400m"
-}
-
-variable "nginx_ingress_resources_limits_memory" {
-  description = "Memory limits for NGINX Ingress"
-  type        = string
-  default     = "400Mi"
 }
 
 variable "postgresql_architecture" {
@@ -721,6 +685,12 @@ variable "real_domain" {
   description = "The real domain to use for the cluster"
   type        = string
   default     = "danielgherasim.com"
+}
+
+variable "auth_domain" {
+  description = "Dedicated Keycloak hostname. Defaults to auth.<real_domain> so dev/staging app hostnames can share one IdP hostname."
+  type        = string
+  default     = ""
 }
 
 variable "enable_aws_platform_addons" {

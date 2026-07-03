@@ -61,7 +61,9 @@ alertmanager:
     retention: 120h
     podAntiAffinity: "soft"
     externalUrl: "https://${DOMAIN}/alertmanager"
-  configSecret: "alertmanager-config"
+  # This is the *name* of a Kubernetes Secret (created elsewhere) that holds
+  # the Alertmanager config, not a credential value.
+  configSecret: "alertmanager-config" #checkov:skip=CKV_SECRET_6:secret name reference, not a credential value
   configFileName: "alertmanager.yaml"
 
 grafana:
