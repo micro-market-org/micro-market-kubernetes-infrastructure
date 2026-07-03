@@ -158,3 +158,98 @@ resource "kubernetes_manifest" "argocd_platform_root_application" {
     helm_release.argocd,
   ]
 }
+
+# ApplicationSet that fans out the 4 microservice Helm charts (in the deployment
+# repo) across the 3 environments. Bootstrapped by Terraform the same way as
+# platform-root above (a kubernetes_manifest, not a committed YAML) so it exists
+# the moment ArgoCD is up. Matrix generator = {apps} x {envs}; classic
+# fasttemplate substitution ({{app}}/{{env}}), NOT goTemplate.
+#
+# Per the architecture decision, image repo/tag and global.domain/environment/
+# keycloak.* are NOT injected as ApplicationSet helm parameters — they live in
+# the per-env values files (deployment/environments/<env>/<app>-values.yaml),
+# keeping the values files the single source of truth (also the write-back target
+# for the Task 29 CI promote stage).
+resource "kubernetes_manifest" "argocd_microservices_appset" {
+  manifest = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "ApplicationSet"
+    metadata = {
+      name      = "microservices"
+      namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+      labels = {
+        "app.kubernetes.io/part-of" = "microservices"
+        "cloud-provider"            = var.cloud_provider
+      }
+    }
+    spec = {
+      generators = [
+        {
+          matrix = {
+            generators = [
+              {
+                list = {
+                  elements = [
+                    { app = "catalog" },
+                    { app = "orders" },
+                    { app = "audit" },
+                    { app = "micro-market-frontend" },
+                  ]
+                }
+              },
+              {
+                list = {
+                  elements = [
+                    { env = "dev" },
+                    { env = "staging" },
+                    { env = "prod" },
+                  ]
+                }
+              },
+            ]
+          }
+        }
+      ]
+      template = {
+        metadata = {
+          name = "{{app}}-{{env}}"
+          labels = {
+            "app.kubernetes.io/part-of" = "microservices"
+            "environment"               = "{{env}}"
+            "cloud-provider"            = var.cloud_provider
+          }
+        }
+        spec = {
+          project = "default"
+          source = {
+            repoURL        = var.argocd_deployment_repo_url
+            targetRevision = var.argocd_deployment_target_revision
+            path           = "{{app}}"
+            helm = {
+              valueFiles = [
+                "../environments/{{env}}/{{app}}-values.yaml",
+              ]
+            }
+          }
+          destination = {
+            server    = "https://kubernetes.default.svc"
+            namespace = "micro-market-{{env}}"
+          }
+          syncPolicy = {
+            automated = {
+              prune    = true
+              selfHeal = true
+            }
+            syncOptions = [
+              "CreateNamespace=true",
+            ]
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    helm_release.argocd,
+  ]
+}

@@ -193,6 +193,12 @@ variable "argocd_deployment_repo_url" {
   default     = "https://gitlab.com/microservices1691715/deployment.git"
 }
 
+variable "argocd_deployment_target_revision" {
+  description = "Git target revision for the microservices ApplicationSet source (deployment repo)"
+  type        = string
+  default     = "HEAD"
+}
+
 variable "argocd_platform_repo_url" {
   description = "Git repository URL containing platform add-on GitOps source consumed by ArgoCD"
   type        = string
@@ -215,32 +221,6 @@ variable "container_image_namespace" {
   description = "Image namespace/project path used with container_registry for non-AWS providers"
   type        = string
   default     = ""
-}
-
-variable "gitops_applications" {
-  description = "Applications managed by the ArgoCD ApplicationSet"
-  type = list(object({
-    name = string
-    path = string
-  }))
-  default = [
-    {
-      name = "catalog"
-      path = "catalog"
-    },
-    {
-      name = "audit"
-      path = "audit"
-    },
-    {
-      name = "orders"
-      path = "orders"
-    },
-    {
-      name = "micro-market-frontend"
-      path = "micro-market-frontend"
-    }
-  ]
 }
 
 variable "database" {
