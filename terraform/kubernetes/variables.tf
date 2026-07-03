@@ -2,7 +2,7 @@ variable "cloud_provider" {
   type        = string
   description = "The cloud provider to use (azure, gcp, or aws)"
   validation {
-    condition = contains(["azure", "gcp", "aws"], var.cloud_provider)
+    condition     = contains(["azure", "gcp", "aws"], var.cloud_provider)
     error_message = "The cloud_provider value must be 'azure', 'gcp', or 'aws'."
   }
 }
@@ -102,7 +102,7 @@ variable "gcp_credentials" {
 }
 variable "project_name" {
   type    = string
-  default = "cloud-infra"
+  default = "danielgherasim-microservices"
 }
 variable "environment" {
   type    = string
@@ -111,7 +111,7 @@ variable "environment" {
 variable "cluster_issuer" {
   type        = string
   description = "The cert-manager ClusterIssuer to use for certificate issuance"
-  default     = "letsencrypt-production-cluster-issuer"
+  default     = "letsencrypt-cloudflare-dns"
 }
 
 variable "aws_region" {
@@ -185,6 +185,50 @@ variable "gitlab_username" {
   description = "GitLab username for ArgoCD"
   type        = string
   default     = ""
+}
+
+variable "argocd_deployment_repo_url" {
+  description = "Git repository URL containing the deployment Helm charts consumed by ArgoCD"
+  type        = string
+  default     = "https://gitlab.com/microservices1691715/deployment.git"
+}
+
+variable "container_registry" {
+  description = "Container registry host for non-AWS image repositories. AWS uses ECR repository URLs from remote state when available."
+  type        = string
+  default     = ""
+}
+
+variable "container_image_namespace" {
+  description = "Image namespace/project path used with container_registry for non-AWS providers"
+  type        = string
+  default     = ""
+}
+
+variable "gitops_applications" {
+  description = "Applications managed by the ArgoCD ApplicationSet"
+  type = list(object({
+    name = string
+    path = string
+  }))
+  default = [
+    {
+      name = "catalog"
+      path = "catalog"
+    },
+    {
+      name = "audit"
+      path = "audit"
+    },
+    {
+      name = "orders"
+      path = "orders"
+    },
+    {
+      name = "micro-market-frontend"
+      path = "micro-market-frontend"
+    }
+  ]
 }
 
 variable "database" {
@@ -676,5 +720,71 @@ variable "postgresql_metrics_resources_limits_cpu" {
 variable "real_domain" {
   description = "The real domain to use for the cluster"
   type        = string
-  default     = "micro-market.cloud"
+  default     = "danielgherasim.com"
+}
+
+variable "enable_aws_platform_addons" {
+  description = "Install AWS-specific Kubernetes platform add-ons when cloud_provider is aws"
+  type        = bool
+  default     = true
+}
+
+variable "aws_load_balancer_controller_role_arn" {
+  description = "IAM role ARN used by AWS Load Balancer Controller service account"
+  type        = string
+  default     = ""
+}
+
+variable "external_dns_role_arn" {
+  description = "IAM role ARN used by ExternalDNS service account"
+  type        = string
+  default     = ""
+}
+
+variable "external_secrets_role_arn" {
+  description = "IAM role ARN used by External Secrets Operator controller service account"
+  type        = string
+  default     = ""
+}
+
+variable "cloudflare_api_token" {
+  description = "Scoped Cloudflare API token for DNS record automation and DNS-01 validation"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "cloudflare_api_token_secret_name" {
+  description = "Kubernetes secret name containing the Cloudflare API token"
+  type        = string
+  default     = "cloudflare-api-token"
+}
+
+variable "cloudflare_zone_id" {
+  description = "Cloudflare zone ID for danielgherasim.com"
+  type        = string
+  default     = ""
+}
+
+variable "lets_encrypt_email" {
+  description = "Email used for Let's Encrypt account registration"
+  type        = string
+  default     = "admin@danielgherasim.com"
+}
+
+variable "enable_keycloak_demo_users" {
+  description = "Import demo Keycloak users. Keep disabled outside development."
+  type        = bool
+  default     = false
+}
+
+variable "keycloak_log_level" {
+  description = "Keycloak runtime log level"
+  type        = string
+  default     = "info"
+
+  validation {
+    condition     = contains(["trace", "debug", "info", "warn", "error", "fatal"], var.keycloak_log_level)
+    error_message = "keycloak_log_level must be one of: trace, debug, info, warn, error, fatal."
+  }
 }

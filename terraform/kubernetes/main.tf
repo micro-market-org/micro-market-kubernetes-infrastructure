@@ -68,8 +68,8 @@ locals {
   aws_provider_secret_key = var.cloud_provider == "aws" ? var.aws_secret_key : null
   aws_provider_token      = var.cloud_provider == "aws" ? var.aws_session_token : null
 
-  use_gcp_auth = var.cloud_provider == "gcp"
-  use_aws_auth = var.cloud_provider == "aws"
+  use_gcp_auth         = var.cloud_provider == "gcp"
+  use_aws_auth         = var.cloud_provider == "aws"
   aws_eks_cluster_name = var.cloud_provider == "aws" ? data.terraform_remote_state.aws[0].outputs.eks_cluster_name : null
 
   kubernetes_host = (
@@ -77,16 +77,16 @@ locals {
   )
 
   kubernetes_client_certificate = var.cloud_provider == "azure" ? base64decode(data.terraform_remote_state.azure[0].outputs.kubernetes_client_certificate) : null
-  kubernetes_client_key = var.cloud_provider == "azure" ? base64decode(data.terraform_remote_state.azure[0].outputs.kubernetes_client_key) : null
+  kubernetes_client_key         = var.cloud_provider == "azure" ? base64decode(data.terraform_remote_state.azure[0].outputs.kubernetes_client_key) : null
 
   kubernetes_cluster_ca_certificate = (
     var.cloud_provider == "azure" ? base64decode(data.terraform_remote_state.azure[0].outputs.kubernetes_cluster_ca_certificate) : var.cloud_provider == "gcp" ? base64decode(data.terraform_remote_state.gcp[0].outputs.kubernetes_cluster_ca_certificate) : var.cloud_provider == "aws" ? base64decode(data.terraform_remote_state.aws[0].outputs.eks_cluster_certificate_authority_data) : null
   )
 
   kubernetes_config = {
-    host               = local.kubernetes_host
-    client_certificate = local.kubernetes_client_certificate
-    client_key         = local.kubernetes_client_key
+    host                   = local.kubernetes_host
+    client_certificate     = local.kubernetes_client_certificate
+    client_key             = local.kubernetes_client_key
     cluster_ca_certificate = local.kubernetes_cluster_ca_certificate
   }
 }

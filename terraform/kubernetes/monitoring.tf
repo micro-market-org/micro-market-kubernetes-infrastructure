@@ -54,17 +54,17 @@ resource "kubernetes_secret_v1" "loki_auth_secret" {
 }
 
 resource "helm_release" "kube-prometheus" {
-  name       = "kube-prometheus-stack"
-  namespace  = kubernetes_namespace_v1.monitoring.metadata[0].name
-  version    = "75.3.0"
-  repository = "https://prometheus-community.github.io/helm-charts"
-  chart      = "kube-prometheus-stack"
-  timeout    = 600
-  values     = [file("${path.root}/configs/kube-prometheus_config.yaml")]
-  force_update = true
-  replace      = true
+  name          = "kube-prometheus-stack"
+  namespace     = kubernetes_namespace_v1.monitoring.metadata[0].name
+  version       = "75.3.0"
+  repository    = "https://prometheus-community.github.io/helm-charts"
+  chart         = "kube-prometheus-stack"
+  timeout       = 600
+  values        = [file("${path.root}/configs/kube-prometheus_config.yaml")]
+  force_update  = true
+  replace       = true
   recreate_pods = true
-  depends_on = [kubernetes_config_map_v1.grafana_alert_rules, kubernetes_config_map_v1.grafana_contact_points]
+  depends_on    = [kubernetes_config_map_v1.grafana_alert_rules, kubernetes_config_map_v1.grafana_contact_points]
 
   set_sensitive {
     name  = "grafana.adminPassword"

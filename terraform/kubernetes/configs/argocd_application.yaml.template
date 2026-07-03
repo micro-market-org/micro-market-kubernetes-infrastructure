@@ -10,20 +10,22 @@ spec:
           - list:
               elements:
                 - env: ${ENV}
-                  registry: ${REGISTRY}
                   provider: ${PROVIDER}
-                  project: ${PROJECT_NAME}
                   domain: ${DOMAIN}
           - list:
               elements:
                 - name: catalog
                   path: catalog
+                  imageRepository: ${CATALOG_IMAGE_REPOSITORY}
                 - name: audit
                   path: audit
+                  imageRepository: ${AUDIT_IMAGE_REPOSITORY}
                 - name: orders
                   path: orders
+                  imageRepository: ${ORDERS_IMAGE_REPOSITORY}
                 - name: micro-market-frontend
                   path: micro-market-frontend
+                  imageRepository: ${FRONTEND_IMAGE_REPOSITORY}
   template:
     metadata:
       name: '{{name}}'
@@ -45,7 +47,7 @@ spec:
             - name: global.environment
               value: '{{env}}'
             - name: image.repository
-              value: '{{registry}}/{{project}}/{{name}}'
+              value: '{{imageRepository}}'
             - name: global.domain
               value: '{{domain}}'
             - name: ingress.hosts[0].host
@@ -53,7 +55,7 @@ spec:
             - name: ingress.tls[0].hosts[0]
               value: '{{domain}}'
             - name: configMaps.micro-market-frontend-config.data.NEXT_PUBLIC_KEYCLOAK_URL
-              value: '{{domain}}/auth'
+              value: 'https://{{domain}}/auth'
             - name: configMaps.micro-market-frontend-config.data.NEXT_PUBLIC_API_URL
               value: 'https://{{domain}}'
       destination:

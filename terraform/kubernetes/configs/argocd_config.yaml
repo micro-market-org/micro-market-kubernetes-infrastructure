@@ -16,7 +16,7 @@ redis:
 
 configs:
   cm:
-    admin.enabled: true
+    admin.enabled: false
     timeout.reconciliation: 180s
     application.instanceLabelKey: argocd.argoproj.io/instance
     url: "${ARGOCD_URL}"
@@ -26,7 +26,7 @@ configs:
       clientID: argocd
       clientSecret: $argo-oidc-client-secret
       requestedScopes: ["openid", "profile", "email"]
-      insecureSkipVerify: true
+      insecureSkipVerify: false
     resource.customizations.ignoreResourceUpdates.all: |
       jsonPointers:
         - /status
@@ -149,7 +149,7 @@ server:
     enabled: true
     issuer:
       kind: "ClusterIssuer"
-      name: "letsencrypt-production-cluster-issuer"
+      name: "letsencrypt-cloudflare-dns"
   ingress:
     enabled: true
     ingressClassName: "nginx"
@@ -164,8 +164,7 @@ server:
     hosts:
       - "${DOMAIN}"
     annotations:
-      cert-manager.io/cluster-issuer: "letsencrypt-production-cluster-issuer"
-      acme.cert-manager.io/http01-edit-in-place: "true"
+      cert-manager.io/cluster-issuer: "letsencrypt-cloudflare-dns"
       nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
       nginx.ingress.kubernetes.io/use-regex: "true"
       nginx.ingress.kubernetes.io/proxy-body-size: "100m"

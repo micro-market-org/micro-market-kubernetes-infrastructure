@@ -16,29 +16,28 @@ resource "helm_release" "cert_manager" {
   namespace        = kubernetes_namespace_v1.nginx.metadata[0].name
   create_namespace = true
   timeout          = 300
-  depends_on       = [helm_release.kube-prometheus]
 
   values = [
     yamlencode({
-      installCRDs = true
+      installCRDs  = true
       replicaCount = var.cert_manager_replicas
 
       webhook = {
         replicaCount = var.cert_manager_webhook_replicas
-        securePort = 10250
-        hostNetwork = false
+        securePort   = 10250
+        hostNetwork  = false
         securityContext = {
           enabled = true
         }
-        extraArgs = ["--v=5"]
+        extraArgs      = ["--v=5"]
         timeoutSeconds = 30
         resources = {
           requests = {
-            cpu = var.cert_manager_webhook_resources_requests_cpu
+            cpu    = var.cert_manager_webhook_resources_requests_cpu
             memory = var.cert_manager_webhook_resources_requests_memory
           }
           limits = {
-            cpu = var.cert_manager_webhook_resources_limits_cpu
+            cpu    = var.cert_manager_webhook_resources_limits_cpu
             memory = var.cert_manager_webhook_resources_limits_memory
           }
         }
@@ -51,9 +50,9 @@ resource "helm_release" "cert_manager" {
                   labelSelector = {
                     matchExpressions = [
                       {
-                        key = "app.kubernetes.io/name"
+                        key      = "app.kubernetes.io/name"
                         operator = "In"
-                        values = ["webhook"]
+                        values   = ["webhook"]
                       }
                     ]
                   }
@@ -67,14 +66,14 @@ resource "helm_release" "cert_manager" {
 
       cainjector = {
         replicaCount = var.cert_manager_cainjector_replicas
-        enabled = true
+        enabled      = true
         resources = {
           requests = {
-            cpu = var.cert_manager_cainjector_resources_requests_cpu
+            cpu    = var.cert_manager_cainjector_resources_requests_cpu
             memory = var.cert_manager_cainjector_resources_requests_memory
           }
           limits = {
-            cpu = var.cert_manager_cainjector_resources_limits_cpu
+            cpu    = var.cert_manager_cainjector_resources_limits_cpu
             memory = var.cert_manager_cainjector_resources_limits_memory
           }
         }
@@ -87,9 +86,9 @@ resource "helm_release" "cert_manager" {
                   labelSelector = {
                     matchExpressions = [
                       {
-                        key = "app.kubernetes.io/name"
+                        key      = "app.kubernetes.io/name"
                         operator = "In"
-                        values = ["cainjector"]
+                        values   = ["cainjector"]
                       }
                     ]
                   }
@@ -114,20 +113,20 @@ resource "helm_release" "cert_manager" {
       prometheus = {
         enabled = true
         servicemonitor = {
-          enabled = true
+          enabled            = true
           prometheusInstance = "kube-prometheus-stack"
-          interval = "30s"
-          scrapeTimeout = "10s"
+          interval           = "30s"
+          scrapeTimeout      = "10s"
         }
       }
 
       resources = {
         requests = {
-          cpu = var.cert_manager_resources_requests_cpu
+          cpu    = var.cert_manager_resources_requests_cpu
           memory = var.cert_manager_resources_requests_memory
         }
         limits = {
-          cpu = var.cert_manager_resources_limits_cpu
+          cpu    = var.cert_manager_resources_limits_cpu
           memory = var.cert_manager_resources_limits_memory
         }
       }
@@ -141,9 +140,9 @@ resource "helm_release" "cert_manager" {
                 labelSelector = {
                   matchExpressions = [
                     {
-                      key = "app.kubernetes.io/name"
+                      key      = "app.kubernetes.io/name"
                       operator = "In"
-                      values = ["cert-manager"]
+                      values   = ["cert-manager"]
                     }
                   ]
                 }
@@ -156,8 +155,8 @@ resource "helm_release" "cert_manager" {
 
       podAnnotations = {
         "prometheus.io/scrape" = "true"
-        "prometheus.io/path" = "/metrics"
-        "prometheus.io/port" = "9402"
+        "prometheus.io/path"   = "/metrics"
+        "prometheus.io/port"   = "9402"
       }
     })
   ]
@@ -196,24 +195,27 @@ resource "helm_release" "nginx-ingress" {
           externalTrafficPolicy = "Local"
           annotations = {
             "service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path" = var.cloud_provider == "azure" ? "/healthz" : null
+            "service.beta.kubernetes.io/aws-load-balancer-type"                        = var.cloud_provider == "aws" ? "external" : null
+            "service.beta.kubernetes.io/aws-load-balancer-nlb-target-type"             = var.cloud_provider == "aws" ? "ip" : null
+            "service.beta.kubernetes.io/aws-load-balancer-scheme"                      = var.cloud_provider == "aws" ? "internet-facing" : null
             "cloud.google.com/neg"                                                     = var.cloud_provider == "gcp" ? "{\"ingress\": true}" : null
             "cloud.google.com/load-balancer-type"                                      = var.cloud_provider == "gcp" ? "External" : null
           }
         }
-        allowSnippetAnnotations = true
+        allowSnippetAnnotations = false
         config = {
-          "enable-real-ip"          = "true"
-          "proxy-body-size"         = "20m"
-          "ssl-protocols"           = "TLSv1.2 TLSv1.3"
-          "ssl-ciphers"             = "HIGH:!aNULL:!MD5"
-          "hsts"                    = "true"
-          "hsts-max-age"            = "31536000"
-          "hsts-include-subdomains" = "true"
-          "keep-alive"              = "75"
-          "keep-alive-requests"     = "100"
+          "enable-real-ip"                 = "true"
+          "proxy-body-size"                = "20m"
+          "ssl-protocols"                  = "TLSv1.2 TLSv1.3"
+          "ssl-ciphers"                    = "HIGH:!aNULL:!MD5"
+          "hsts"                           = "true"
+          "hsts-max-age"                   = "31536000"
+          "hsts-include-subdomains"        = "true"
+          "keep-alive"                     = "75"
+          "keep-alive-requests"            = "100"
           "upstream-keepalive-connections" = "200"
           "upstream-keepalive-timeout"     = "60"
-          "use-forwarded-headers"   = "true"
+          "use-forwarded-headers"          = "true"
         }
         resources = {
           requests = {
@@ -250,7 +252,7 @@ resource "helm_release" "nginx-ingress" {
     })
   ]
 
-  depends_on = [helm_release.cert_manager, helm_release.kube-prometheus]
+  depends_on = [helm_release.cert_manager, helm_release.aws_load_balancer_controller]
 }
 
 resource "kubernetes_ingress_v1" "ingress_grafana" {
@@ -258,13 +260,12 @@ resource "kubernetes_ingress_v1" "ingress_grafana" {
     name      = "grafana-ingress"
     namespace = kubernetes_namespace_v1.monitoring.metadata[0].name
     annotations = {
-      "cert-manager.io/cluster-issuer"                 = var.cluster_issuer
-      "kubernetes.io/ingress.class"                    = "nginx"
-      "nginx.ingress.kubernetes.io/proxy-body-size"    = "20m"
-      "acme.cert-manager.io/http01-edit-in-place"      = "true"
-      "nginx.ingress.kubernetes.io/force-ssl-redirect" = "true"
-      "nginx.ingress.kubernetes.io/ssl-redirect"       = "true"
-      "nginx.ingress.kubernetes.io/backend-protocol"   = "HTTP"
+      "cert-manager.io/cluster-issuer"                    = var.cluster_issuer
+      "kubernetes.io/ingress.class"                       = "nginx"
+      "nginx.ingress.kubernetes.io/proxy-body-size"       = "20m"
+      "nginx.ingress.kubernetes.io/force-ssl-redirect"    = "true"
+      "nginx.ingress.kubernetes.io/ssl-redirect"          = "true"
+      "nginx.ingress.kubernetes.io/backend-protocol"      = "HTTP"
       "nginx.ingress.kubernetes.io/use-forwarded-headers" = "true"
     }
   }

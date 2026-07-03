@@ -1,5 +1,5 @@
 environment    = "prod"
-cluster_issuer = "letsencrypt-production-cluster-issuer"
+cluster_issuer = "letsencrypt-cloudflare-dns"
 database       = "microservices"
 azure_region   = "westeurope"
 

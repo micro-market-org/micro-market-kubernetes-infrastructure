@@ -1,23 +1,20 @@
 #!/bin/bash
 
-ENVIRONMENT="prod"
-PROJECT_NAMESPACE="microservices1691711"
-CLOUD_PROVIDER="azure"
+ENVIRONMENT="${ENVIRONMENT:-prod}"
+PROJECT_NAMESPACE="${PROJECT_NAMESPACE:-danielgherasim-microservices}"
+DOMAIN="${DOMAIN:-danielgherasim.com}"
+CLOUD_PROVIDER="${CLOUD_PROVIDER:-azure}"
 BACKEND_TYPE="azurerm"
-CONTAINER_REGISTRY_NAME=""
-GITLAB_ACCESS_TOKEN="g"
-GITLAB_USERNAME="adriangherasim1@gmail.com"
-ARM_CLIENT_ID=""
-ARM_CLIENT_SECRET=""
-ARM_TENANT_ID=""
-ARM_SUBSCRIPTION_ID=""
+CONTAINER_REGISTRY_NAME="${CONTAINER_REGISTRY_NAME:-acr${PROJECT_NAMESPACE}${ENVIRONMENT}.azurecr.io}"
 
-if [ -z "$ARM_CLIENT_ID" ] || [ -z "$ARM_CLIENT_SECRET" ] || [ -z "$ARM_TENANT_ID" ] || [ -z "$ARM_SUBSCRIPTION_ID" ]; then
-  echo "Error: Azure credentials not set. Please set the following environment variables:"
-  echo "  ARM_CLIENT_ID"
-  echo "  ARM_CLIENT_SECRET"
-  echo "  ARM_TENANT_ID"
-  echo "  ARM_SUBSCRIPTION_ID"
+
+if [ -z "${ARM_CLIENT_ID:-}" ] || [ -z "${ARM_CLIENT_SECRET:-}" ] || [ -z "${ARM_TENANT_ID:-}" ] || [ -z "${ARM_SUBSCRIPTION_ID:-}" ]; then
+  echo "Error: Azure credentials not set. Set ARM_CLIENT_ID, ARM_CLIENT_SECRET, ARM_TENANT_ID, and ARM_SUBSCRIPTION_ID." >&2
+  exit 1
+fi
+
+if [ -z "${GITLAB_ACCESS_TOKEN:-}" ] || [ -z "${GITLAB_USERNAME:-}" ]; then
+  echo "Error: GitLab credentials not set. Set GITLAB_ACCESS_TOKEN and GITLAB_USERNAME." >&2
   exit 1
 fi
 
@@ -69,6 +66,7 @@ if [[ "$confirmation" == "yes" ]]; then
     sed "s/\${ENV}/$ENVIRONMENT/g" | \
     sed "s/\${REGISTRY}/$CONTAINER_REGISTRY_NAME/g" | \
     sed "s/\${PROJECT_NAME}/$PROJECT_NAMESPACE/g" | \
+    sed "s/\${DOMAIN}/$DOMAIN/g" | \
     sed "s/\${PROVIDER}/$CLOUD_PROVIDER/g" > ./configs/argocd_application.yaml
 
   kubectl apply -f ./configs/argocd_application.yaml

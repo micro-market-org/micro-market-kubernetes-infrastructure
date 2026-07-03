@@ -40,7 +40,7 @@ resource "helm_release" "postgresql" {
       persistence:
         enabled: true
         size: ${var.postgresql_primary_storage_size}
-        storageClass: "managed-csi"
+        storageClass: "${local.platform_storage_class}"
 
       resources:
         requests:
@@ -76,7 +76,7 @@ resource "helm_release" "postgresql" {
       persistence:
         enabled: true
         size: ${var.postgresql_read_replicas_storage_size}
-        storageClass: "managed-csi"
+        storageClass: "${local.platform_storage_class}"
 
       resources:
         requests:

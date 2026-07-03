@@ -26,6 +26,8 @@ resource "random_password" "audit_client_secret" {
 }
 
 resource "kubernetes_secret_v1" "orders_db_secret" {
+  count = local.aws_platform_enabled ? 0 : 1
+
   metadata {
     name      = "orders-db-secret"
     namespace = kubernetes_namespace_v1.microservices.metadata[0].name
@@ -38,6 +40,8 @@ resource "kubernetes_secret_v1" "orders_db_secret" {
 }
 
 resource "kubernetes_secret_v1" "audit_db_secret" {
+  count = local.aws_platform_enabled ? 0 : 1
+
   metadata {
     name      = "audit-db-secret"
     namespace = kubernetes_namespace_v1.microservices.metadata[0].name
@@ -50,6 +54,8 @@ resource "kubernetes_secret_v1" "audit_db_secret" {
 }
 
 resource "kubernetes_secret_v1" "catalog_db_secret" {
+  count = local.aws_platform_enabled ? 0 : 1
+
   metadata {
     name      = "catalog-db-secret"
     namespace = kubernetes_namespace_v1.microservices.metadata[0].name
@@ -62,6 +68,8 @@ resource "kubernetes_secret_v1" "catalog_db_secret" {
 }
 
 resource "kubernetes_secret_v1" "keycloak_client_secrets" {
+  count = local.aws_platform_enabled ? 0 : 1
+
   metadata {
     name      = "keycloak-secret"
     namespace = kubernetes_namespace_v1.microservices.metadata[0].name

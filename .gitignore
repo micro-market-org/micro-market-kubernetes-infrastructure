@@ -1,0 +1,29 @@
+# Local .terraform directories
+# (.terraform.lock.hcl is intentionally NOT ignored — commit it per HashiCorp guidance)
+**/.terraform/*
+
+# Terraform state and plans — never commit
+*.tfstate
+*.tfstate.*
+**/tfplan
+**/tfplan.*
+**/plan.json
+
+# Credential material — never commit
+**/*credentials*.json
+**/*service-account*.json
+**/gcp-credentials.json
+**/*sa-key*.json
+**/*-key.json
+i-binder-*.json
+*.pem
+*.p12
+*.pfx
+kubeconfig
+kubeconfig.*
+
+# Environment-specific files
+.env
+.env.*
+*.auto.tfvars
+*.tfvars.local

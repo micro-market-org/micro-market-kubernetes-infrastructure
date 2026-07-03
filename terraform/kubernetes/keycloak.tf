@@ -29,6 +29,29 @@ resource "random_password" "administrator_user_password" {
   special = false
 }
 
+locals {
+  keycloak_demo_users = var.enable_keycloak_demo_users ? [
+    {
+      username   = "client"
+      first_name = "Client"
+      last_name  = "User"
+      email      = "client@danielgherasim.com"
+      password   = random_password.client_user_password.result
+      groups     = ["user"]
+      roles      = ["user"]
+    },
+    {
+      username   = "administrator"
+      first_name = "Administrator"
+      last_name  = "User"
+      email      = "administrator@danielgherasim.com"
+      password   = random_password.administrator_user_password.result
+      groups     = ["admin"]
+      roles      = ["admin"]
+    }
+  ] : []
+}
+
 resource "kubernetes_secret_v1" "keycloak_postgresql_secret" {
   metadata {
     name      = "keycloak-postgresql"
@@ -63,9 +86,9 @@ resource "helm_release" "keycloak" {
   namespace         = kubernetes_namespace_v1.keycloak.metadata[0].name
   create_namespace  = false
   dependency_update = true
-  force_update = true
-  replace      = true
-  recreate_pods = true
+  force_update      = true
+  replace           = true
+  recreate_pods     = true
   timeout           = 300
 
   depends_on = [
@@ -128,9 +151,9 @@ resource "helm_release" "keycloak" {
             name: keycloak-admin
             key: password
       - name: KC_SPI_EVENTS_LISTENER_JBOSS_LOGGING_SUCCESS_LEVEL
-        value: "debug"
+        value: "${var.keycloak_log_level}"
       - name: KC_SPI_EVENTS_LISTENER_JBOSS_LOGGING_ERROR_LEVEL
-        value: "debug"
+        value: "${var.keycloak_log_level}"
       - name: KC_FEATURES
         value: "token-exchange,admin-fine-grained-authz"
       - name: KC_HOSTNAME
@@ -142,7 +165,7 @@ resource "helm_release" "keycloak" {
       - name: KC_HTTP_ENABLED
         value: "true"
       - name: KEYCLOAK_EXTRA_ARGS
-        value: "--import-realm --spi-realm-import-strategy=OVERWRITE_EXISTING"
+        value: "${var.enable_keycloak_demo_users ? "--import-realm --spi-realm-import-strategy=OVERWRITE_EXISTING" : ""}"
       - name: JAVA_OPTS_APPEND
         value: "-Dquarkus.bootstrap.runner.serialized=false"
       - name: KC_HEALTH_ENABLED
@@ -150,7 +173,7 @@ resource "helm_release" "keycloak" {
       - name: KC_METRICS_ENABLED
         value: "true"
       - name: KC_LOG_LEVEL
-        value: "debug"
+        value: "${var.keycloak_log_level}"
       - name: KC_CACHE
         value: "local"
 
@@ -209,7 +232,7 @@ resource "helm_release" "keycloak" {
 
     logging:
       output: default
-      level: DEBUG
+      level: ${upper(var.keycloak_log_level)}
 
     tls:
       enabled: false
@@ -266,7 +289,6 @@ resource "kubernetes_ingress_v1" "ingress_keycloak" {
     namespace = kubernetes_namespace_v1.keycloak.metadata[0].name
     annotations = {
       "cert-manager.io/cluster-issuer"                      = var.cluster_issuer
-      "acme.cert-manager.io/http01-edit-in-place"           = "true"
       "kubernetes.io/ingress.class"                         = "nginx"
       "nginx.ingress.kubernetes.io/proxy-body-size"         = "20m"
       "nginx.ingress.kubernetes.io/force-ssl-redirect"      = "true"
@@ -310,7 +332,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm_config" {
   }
 
   data = {
-    "master-realm.json"        = <<-EOT
+    "master-realm.json" = <<-EOT
     {
       "realm": "master",
       "enabled": true,
@@ -350,7 +372,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm_config" {
           "publicClient": false,
           "protocol": "openid-connect",
           "fullScopeAllowed": true,
-          "directAccessGrantsEnabled": true
+          "directAccessGrantsEnabled": false
         }
       ]
     }
@@ -408,65 +430,26 @@ resource "kubernetes_config_map_v1" "keycloak_realm_config" {
           "subGroups": []
         }
       ],
-      "users": [
+      "users": ${jsonencode([
+    for user in local.keycloak_demo_users : {
+      username      = user.username
+      enabled       = true
+      emailVerified = true
+      firstName     = user.first_name
+      lastName      = user.last_name
+      email         = user.email
+      credentials = [
         {
-          "username": "admin",
-          "enabled": true,
-          "emailVerified": true,
-          "firstName": "Administrator",
-          "lastName": "User",
-          "email": "admin@microservices.com",
-          "createdTimestamp": 1625097600000,
-          "credentials": [
-            {
-              "type": "password",
-              "value": "${random_password.keycloak_admin_password.result}",
-              "temporary": false
-            }
-          ],
-          "groups": ["admin"],
-          "realmRoles": ["admin"],
-          "clientRoles": {}
-        },
-        {
-          "username": "client",
-          "enabled": true,
-          "emailVerified": true,
-          "firstName": "Client",
-          "lastName": "User",
-          "email": "client@microservice.com",
-          "createdTimestamp": 1625097600000,
-          "credentials": [
-            {
-              "type": "password",
-              "value": "${random_password.client_user_password.result}",
-              "temporary": false
-            }
-          ],
-          "groups": ["user"],
-          "realmRoles": ["user"],
-          "clientRoles": {}
-        },
-        {
-          "username": "administrator",
-          "enabled": true,
-          "emailVerified": true,
-          "firstName": "Administrator",
-          "lastName": "User",
-          "email": "administrator@microservice.com",
-          "createdTimestamp": 1625097600000,
-          "credentials": [
-            {
-              "type": "password",
-              "value": "${random_password.administrator_user_password.result}",
-              "temporary": false
-            }
-          ],
-          "groups": ["admin"],
-          "realmRoles": ["admin"],
-          "clientRoles": {}
+          type      = "password"
+          value     = user.password
+          temporary = false
         }
-      ],
+      ]
+      groups      = user.groups
+      realmRoles  = user.roles
+      clientRoles = {}
+    }
+])},
       "clients": [
         {
           "clientId": "micro-market-frontend",
@@ -483,7 +466,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm_config" {
           "publicClient": true,
           "protocol": "openid-connect",
           "fullScopeAllowed": true,
-          "directAccessGrantsEnabled": true,
+          "directAccessGrantsEnabled": false,
           "standardFlowEnabled": true,
           "implicitFlowEnabled": false,
           "serviceAccountsEnabled": false,
@@ -508,7 +491,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm_config" {
           "publicClient": false,
           "protocol": "openid-connect",
           "fullScopeAllowed": true,
-          "directAccessGrantsEnabled": true,
+          "directAccessGrantsEnabled": false,
           "standardFlowEnabled": true,
           "implicitFlowEnabled": false,
           "serviceAccountsEnabled": true,
@@ -533,7 +516,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm_config" {
           "publicClient": false,
           "protocol": "openid-connect",
           "fullScopeAllowed": true,
-          "directAccessGrantsEnabled": true,
+          "directAccessGrantsEnabled": false,
           "standardFlowEnabled": true,
           "implicitFlowEnabled": false,
           "serviceAccountsEnabled": true,
@@ -558,7 +541,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm_config" {
           "publicClient": false,
           "protocol": "openid-connect",
           "fullScopeAllowed": true,
-          "directAccessGrantsEnabled": true,
+          "directAccessGrantsEnabled": false,
           "standardFlowEnabled": true,
           "implicitFlowEnabled": false,
           "serviceAccountsEnabled": true,
@@ -656,7 +639,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm_config" {
       ]
     }
     EOT
-  }
+}
 }
 
 output "keycloak_url" {
