@@ -8,6 +8,6 @@ kubectl apply -f ./configs/argocd_project.yaml
 kubectl apply -f ./configs/argocd_application.yaml
 
 WORKSPACE="prod"
-CI_PROJECT_NAMESPACE="microservices1691719"
+CI_PROJECT_NAMESPACE="danielgherasim-microservices"
 PUBLIC_IP_NAME=$(az network public-ip list --resource-group rg-$CI_PROJECT_NAMESPACE-$WORKSPACE-aks --query "[?contains(name, 'kubernetes-')].name" -o tsv)
 az network public-ip update --resource-group rg-$CI_PROJECT_NAMESPACE-$WORKSPACE-aks --name $PUBLIC_IP_NAME --dns-name $CI_PROJECT_NAMESPACE

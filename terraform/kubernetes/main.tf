@@ -1,32 +1,33 @@
 terraform {
-  # required_version = "=1.13.0"
+  required_version = ">= 1.10.0"
 
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "=4.30.0"
+      version = "~> 4.30"
     }
     google = {
       source  = "hashicorp/google"
-      version = "=5.10.0"
+      version = "~> 6.0"
     }
     aws = {
       source  = "hashicorp/aws"
-      version = "=5.40.0"
+      version = "~> 6.0"
     }
     helm = {
       source  = "hashicorp/helm"
-      version = "=2.17.0"
+      version = "~> 2.17"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "=2.37.1"
+      version = "~> 2.37"
     }
   }
 
-  backend "azurerm" {
-
-  }
+  # The state backend is cloud-specific and injected at init time:
+  # CI/scripts copy backends/<type>.tf to backend_override.tf and run
+  # `terraform init -backend-config=backends/<type>.hcl`.
+  # backend_override.tf is gitignored.
 }
 
 provider "azurerm" {

@@ -1,17 +1,41 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-export GOOGLE_APPLICATION_CREDENTIALS="../i-binder-461513-v8-40884e000270.json"
+ENVIRONMENT="${ENVIRONMENT:-dev}"
+PROJECT_NAMESPACE="${PROJECT_NAMESPACE:-danielgherasim-microservices}"
+GCP_REGION="${GCP_REGION:-europe-central2}"
+GCP_ZONE="${GCP_ZONE:-europe-central2-a}"
+REAL_DOMAIN="${REAL_DOMAIN:-danielgherasim.com}"
+CLUSTER_ISSUER="${CLUSTER_ISSUER:-letsencrypt-cloudflare-dns}"
+VAR_FILE="./tfvars_files/${ENVIRONMENT}.tfvars"
+
+# Credentials come from the environment; never reference key files in the repo.
+: "${GCP_PROJECT_ID:?Set GCP_PROJECT_ID}"
+: "${GOOGLE_APPLICATION_CREDENTIALS:?Set GOOGLE_APPLICATION_CREDENTIALS to a service-account key path (or use gcloud ADC)}"
+
+if [[ ! -f "${VAR_FILE}" ]]; then
+  echo "Missing variable file: ${VAR_FILE}" >&2
+  exit 1
+fi
 
 export USE_GKE_GCLOUD_AUTH_PLUGIN=True
 
-terraform init -reconfigure -backend-config="bucket=terraformmicroservicesstate" \
-  -backend-config="prefix=terraform/state" \
-  -backend-config="credentials=../i-binder-461513-v8-40884e000270.json"
+cp backends/gcs.tf backend_override.tf
+terraform init -reconfigure -backend-config="backends/gcs.hcl"
 
-terraform destroy --var-file=./tfvars_files/dev.tfvars \
-  --var cloud_provider="gcp" \
-  --var gcp_project="i-binder-461513-v8" \
-  --var gcp_region="europe-central2" \
-  --var gcp_zone="europe-central2-a" \
-  --var gcp_credentials="../i-binder-461513-v8-40884e000270.json"
-# terraform force-unlock <LOCK_ID>
+terraform plan -destroy \
+  -var-file="${VAR_FILE}" \
+  -var cloud_provider="gcp" \
+  -var gcp_project="${GCP_PROJECT_ID}" \
+  -var gcp_region="${GCP_REGION}" \
+  -var gcp_zone="${GCP_ZONE}" \
+  -var gcp_credentials="${GOOGLE_APPLICATION_CREDENTIALS}" \
+  -var environment="${ENVIRONMENT}" \
+  -var project_name="${PROJECT_NAMESPACE}" \
+  -var real_domain="${REAL_DOMAIN}" \
+  -var cluster_issuer="${CLUSTER_ISSUER}" \
+  -out=tfplan.destroy
+
+terraform apply tfplan.destroy
+
+rm -f tfplan.destroy

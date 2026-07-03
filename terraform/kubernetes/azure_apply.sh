@@ -1,11 +1,13 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
 ENVIRONMENT="${ENVIRONMENT:-prod}"
 PROJECT_NAMESPACE="${PROJECT_NAMESPACE:-danielgherasim-microservices}"
 DOMAIN="${DOMAIN:-danielgherasim.com}"
 CLOUD_PROVIDER="${CLOUD_PROVIDER:-azure}"
 BACKEND_TYPE="azurerm"
-CONTAINER_REGISTRY_NAME="${CONTAINER_REGISTRY_NAME:-acr${PROJECT_NAMESPACE}${ENVIRONMENT}.azurecr.io}"
+# ACR names are alphanumeric only — mirror infrastructure's replace(project_name, "-", "")
+CONTAINER_REGISTRY_NAME="${CONTAINER_REGISTRY_NAME:-acr$(tr -d '-' <<<"${PROJECT_NAMESPACE}")${ENVIRONMENT}.azurecr.io}"
 
 
 if [ -z "${ARM_CLIENT_ID:-}" ] || [ -z "${ARM_CLIENT_SECRET:-}" ] || [ -z "${ARM_TENANT_ID:-}" ] || [ -z "${ARM_SUBSCRIPTION_ID:-}" ]; then
@@ -29,14 +31,9 @@ export TF_VAR_cloud_provider=$CLOUD_PROVIDER
 export TF_VAR_project_name=$PROJECT_NAMESPACE
 export TF_VAR_environment=$ENVIRONMENT
 
-sed -i "s/BACKEND_PLACEHOLDER/${BACKEND_TYPE}/g" main.tf
-
 echo "=== [INFO] Initializing Terraform ==="
-terraform init -migrate-state \
-  -backend-config="resource_group_name=rg-infrastructure" \
-  -backend-config="storage_account_name=terraformmicrostate" \
-  -backend-config="container_name=tfstate" \
-  -backend-config="key=kubernetes.tfstate"
+cp backends/azurerm.tf backend_override.tf
+terraform init -reconfigure -backend-config="backends/azurerm.hcl"
 
 echo "=== [INFO] Selecting workspace: $ENVIRONMENT ==="
 terraform workspace select "$ENVIRONMENT" || terraform workspace new "$ENVIRONMENT"

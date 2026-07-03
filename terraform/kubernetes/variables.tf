@@ -44,9 +44,9 @@ variable "aws_remote_state_bucket" {
 }
 
 variable "aws_remote_state_key" {
-  description = "AWS key for remote state"
+  description = "AWS key for remote state; empty derives aws/<environment>/terraform.tfstate to match the infrastructure repo"
   type        = string
-  default     = "terraform.tfstate"
+  default     = ""
 }
 
 variable "aws_remote_state_region" {

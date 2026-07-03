@@ -71,31 +71,25 @@ variables:
 
 .initialize-terraform: &initialize-terraform
   - cd ${TF_ROOT}
-  - sed -i "s/BACKEND_PLACEHOLDER/${BACKEND_TYPE}/g" main.tf
   - echo "Initializing Terraform with ${BACKEND_TYPE} backend..."
+  # Select the cloud-specific backend by copying its override file
+  # (see backends/); credentials come from provider env vars, never
+  # from -backend-config arguments.
+  - cp "backends/${BACKEND_TYPE}.tf" backend_override.tf
   - |
     case "${CLOUD_PROVIDER}" in
       aws)
-        terraform init \
-          -backend-config="bucket=terraform-microservices1691715-state" \
-          -backend-config="key=terraform.tfstate" \
-          -backend-config="region=${TF_VAR_aws_region}" \
-          -backend-config="access_key=${TF_VAR_aws_access_key}" \
-          -backend-config="secret_key=${TF_VAR_aws_secret_key}" \
-          -backend-config="token=${TF_VAR_aws_session_token}"
+        terraform init -reconfigure \
+          -backend-config="backends/s3.hcl" \
+          -backend-config="key=kubernetes/aws/${WORKSPACE}/terraform.tfstate"
         ;;
       azure)
-        terraform init -migrate-state \
-          -backend-config="resource_group_name=rg-infrastructure" \
-          -backend-config="storage_account_name=terraformmicrostate" \
-          -backend-config="container_name=tfstate" \
-          -backend-config="key=kubernetes.tfstate"
+        terraform init -reconfigure \
+          -backend-config="backends/azurerm.hcl"
         ;;
       gcp)
-        terraform init \
-          -backend-config="bucket=terraformmicroservicesstate" \
-          -backend-config="prefix=kubernetes/state" \
-          -backend-config="credentials=${TF_VAR_gcp_credentials}"
+        terraform init -reconfigure \
+          -backend-config="backends/gcs.hcl"
         ;;
     esac
   - |

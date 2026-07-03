@@ -33,7 +33,9 @@ data "terraform_remote_state" "aws" {
   backend = "s3"
   config = {
     bucket = var.aws_remote_state_bucket
-    key    = var.aws_remote_state_key
+    # Must match the key the infrastructure repo's aws root writes to
+    # (see infrastructure/terraform/aws/apply.sh: aws/<env>/terraform.tfstate).
+    key    = var.aws_remote_state_key != "" ? var.aws_remote_state_key : "aws/${var.environment}/terraform.tfstate"
     region = var.aws_remote_state_region
   }
 }

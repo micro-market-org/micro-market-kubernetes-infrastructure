@@ -2,6 +2,9 @@
 # (.terraform.lock.hcl is intentionally NOT ignored — commit it per HashiCorp guidance)
 **/.terraform/*
 
+# Cloud-specific backend override generated at init time (see backends/)
+backend_override.tf
+
 # Terraform state and plans — never commit
 *.tfstate
 *.tfstate.*
