@@ -33,9 +33,12 @@ resource "kubernetes_namespace_v1" "argocd" {
   metadata {
     name = "argocd"
     labels = {
-      "app.kubernetes.io/managed-by" = "terraform"
-      "environment"                  = var.environment
-      "app.kubernetes.io/part-of"    = "argocd"
+      "app.kubernetes.io/managed-by"       = "terraform"
+      "environment"                        = var.environment
+      "app.kubernetes.io/part-of"          = "argocd"
+      "pod-security.kubernetes.io/enforce" = "baseline"
+      "pod-security.kubernetes.io/audit"   = "restricted"
+      "pod-security.kubernetes.io/warn"    = "restricted"
     }
   }
 }

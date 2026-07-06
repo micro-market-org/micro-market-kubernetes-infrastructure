@@ -47,6 +47,10 @@ The `platform-root` Application follows the same "Terraform creates a `kubernete
 
 Same shape and cloud-parameterization pattern as `../infrastructure`: stages `validate → plan → apply (manual) → destroy (manual)`, backend selection via `backends/{azurerm,gcs,s3}.{tf,hcl}` copied to a gitignored `backend_override.tf` and `terraform init -reconfigure -backend-config=...`. A `checkov` job runs in `validate`, independent of the `validate` (fmt+validate) job, scanning `terraform/`.
 
+## Destroy order and ArgoCD cascade cleanup
+
+Before running a Kubernetes-layer destroy, run `terraform/kubernetes/destroy_argocd_apps.sh` against the target cluster. The helper deletes the `microservices` ApplicationSet, its 12 generated microservice Applications, and `platform-root` with ArgoCD foreground finalizers so ArgoCD prunes managed resources before Terraform removes the bootstrap layer. This implements the pre-destroy cascade-delete step called out in the root runbook.
+
 ## `.checkov.yaml` — much shorter than `infrastructure`'s
 
 `skip-check: []` — empty. This root is intentionally tiny after the Phase 2 bootstrap-only shrink (namespaces + ArgoCD + two `kubernetes_manifest` resources, nothing else), so a full checkov run comes back with zero findings; there's nothing to document a skip for. The file exists purely so the CI `checkov` job has a stable, version-controlled config to point at, with a comment explaining the pattern to follow (`../infrastructure/.checkov.yaml`) if a future change ever introduces a genuine, accepted finding here. One pre-existing false positive (`CKV_SECRET_6` on a `configSecret: "alertmanager-config"` line in `configs/kube-prometheus_config.yaml` — a Kubernetes Secret *name*, not a value, that happened to trip the generic high-entropy-string check) is suppressed inline rather than repo-wide, so real secret-value detection stays active everywhere else.

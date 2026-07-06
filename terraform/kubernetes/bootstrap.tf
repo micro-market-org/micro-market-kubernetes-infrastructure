@@ -10,9 +10,12 @@ resource "kubernetes_namespace_v1" "cert_manager" {
   metadata {
     name = "cert-manager"
     labels = {
-      "app.kubernetes.io/managed-by" = "terraform-bootstrap"
-      "environment"                  = var.environment
-      "app.kubernetes.io/part-of"    = "cert-manager"
+      "app.kubernetes.io/managed-by"       = "terraform-bootstrap"
+      "environment"                        = var.environment
+      "app.kubernetes.io/part-of"          = "cert-manager"
+      "pod-security.kubernetes.io/enforce" = "baseline"
+      "pod-security.kubernetes.io/audit"   = "restricted"
+      "pod-security.kubernetes.io/warn"    = "restricted"
     }
   }
 }
@@ -21,9 +24,12 @@ resource "kubernetes_namespace_v1" "monitoring" {
   metadata {
     name = "monitoring"
     labels = {
-      "app.kubernetes.io/managed-by" = "terraform-bootstrap"
-      "environment"                  = var.environment
-      "app.kubernetes.io/part-of"    = "monitoring"
+      "app.kubernetes.io/managed-by"       = "terraform-bootstrap"
+      "environment"                        = var.environment
+      "app.kubernetes.io/part-of"          = "monitoring"
+      "pod-security.kubernetes.io/enforce" = "baseline"
+      "pod-security.kubernetes.io/audit"   = "restricted"
+      "pod-security.kubernetes.io/warn"    = "restricted"
     }
   }
 }
@@ -32,9 +38,12 @@ resource "kubernetes_namespace_v1" "postgresql" {
   metadata {
     name = "postgresql"
     labels = {
-      "app.kubernetes.io/managed-by" = "terraform-bootstrap"
-      "environment"                  = var.environment
-      "app.kubernetes.io/part-of"    = "postgresql"
+      "app.kubernetes.io/managed-by"       = "terraform-bootstrap"
+      "environment"                        = var.environment
+      "app.kubernetes.io/part-of"          = "postgresql"
+      "pod-security.kubernetes.io/enforce" = "baseline"
+      "pod-security.kubernetes.io/audit"   = "restricted"
+      "pod-security.kubernetes.io/warn"    = "restricted"
     }
   }
 }
@@ -43,9 +52,12 @@ resource "kubernetes_namespace_v1" "keycloak" {
   metadata {
     name = "keycloak"
     labels = {
-      "app.kubernetes.io/managed-by" = "terraform-bootstrap"
-      "environment"                  = var.environment
-      "app.kubernetes.io/part-of"    = "keycloak"
+      "app.kubernetes.io/managed-by"       = "terraform-bootstrap"
+      "environment"                        = var.environment
+      "app.kubernetes.io/part-of"          = "keycloak"
+      "pod-security.kubernetes.io/enforce" = "baseline"
+      "pod-security.kubernetes.io/audit"   = "restricted"
+      "pod-security.kubernetes.io/warn"    = "restricted"
     }
   }
 }
@@ -54,9 +66,12 @@ resource "kubernetes_namespace_v1" "external_dns" {
   metadata {
     name = "external-dns"
     labels = {
-      "app.kubernetes.io/managed-by" = "terraform-bootstrap"
-      "environment"                  = var.environment
-      "app.kubernetes.io/part-of"    = "dns"
+      "app.kubernetes.io/managed-by"       = "terraform-bootstrap"
+      "environment"                        = var.environment
+      "app.kubernetes.io/part-of"          = "dns"
+      "pod-security.kubernetes.io/enforce" = "baseline"
+      "pod-security.kubernetes.io/audit"   = "restricted"
+      "pod-security.kubernetes.io/warn"    = "restricted"
     }
   }
 }
@@ -65,10 +80,13 @@ resource "kubernetes_namespace_v1" "microservices" {
   metadata {
     name = "microservices"
     labels = {
-      "app.kubernetes.io/managed-by" = "terraform-bootstrap"
-      "environment"                  = var.environment
-      "app.kubernetes.io/part-of"    = "microservices"
-      "istio.io/dataplane-mode"      = "ambient"
+      "app.kubernetes.io/managed-by"       = "terraform-bootstrap"
+      "environment"                        = var.environment
+      "app.kubernetes.io/part-of"          = "microservices"
+      "istio.io/dataplane-mode"            = "ambient"
+      "pod-security.kubernetes.io/enforce" = "baseline"
+      "pod-security.kubernetes.io/audit"   = "restricted"
+      "pod-security.kubernetes.io/warn"    = "restricted"
     }
   }
 }
