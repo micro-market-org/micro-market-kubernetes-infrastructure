@@ -3,7 +3,7 @@ set -euo pipefail
 
 ENVIRONMENT="${ENVIRONMENT:-dev}"
 PROJECT_NAMESPACE="${PROJECT_NAMESPACE:-danielgherasim-microservices}"
-AWS_REGION="${AWS_REGION:-us-east-1}"
+AWS_REGION="${AWS_REGION:-eu-central-1}"
 REAL_DOMAIN="${REAL_DOMAIN:-danielgherasim.com}"
 CLUSTER_ISSUER="${CLUSTER_ISSUER:-letsencrypt-cloudflare-dns}"
 STATE_KEY="${TF_STATE_KEY:-kubernetes/aws/${ENVIRONMENT}/terraform.tfstate}"

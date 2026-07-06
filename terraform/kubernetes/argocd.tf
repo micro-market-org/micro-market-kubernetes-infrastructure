@@ -2,33 +2,6 @@ locals {
   argocd_domain = local.current_domain
 }
 
-resource "random_password" "argo_password" {
-  length      = 16
-  special     = true
-  min_special = 2
-  min_upper   = 2
-  min_lower   = 2
-  min_numeric = 2
-}
-
-resource "random_password" "argo_oidc_client_secret" {
-  length      = 16
-  special     = true
-  min_special = 2
-  min_upper   = 2
-  min_lower   = 2
-  min_numeric = 2
-}
-
-resource "random_password" "argo_redis_password" {
-  length      = 16
-  special     = true
-  min_special = 2
-  min_upper   = 2
-  min_lower   = 2
-  min_numeric = 2
-}
-
 resource "kubernetes_namespace_v1" "argocd" {
   metadata {
     name = "argocd"
@@ -79,7 +52,7 @@ resource "helm_release" "argocd" {
 
   set_sensitive {
     name  = "configs.secret.argocdServerAdminPassword"
-    value = random_password.argo_password.result
+    value = local.argocd_admin_password
   }
 
   set {
@@ -124,7 +97,7 @@ resource "helm_release" "argocd" {
 
   set_sensitive {
     name  = "redis.password"
-    value = random_password.argo_redis_password.result
+    value = local.argocd_redis_password
   }
 
   set {

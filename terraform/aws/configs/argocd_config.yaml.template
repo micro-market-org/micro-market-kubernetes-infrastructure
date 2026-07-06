@@ -7,8 +7,8 @@ redis:
   enabled: true
   resources:
     requests:
-      cpu: 40m
-      memory: 50Mi
+      cpu: ${ARGOCD_REDIS_CPU}
+      memory: ${ARGOCD_REDIS_MEMORY}
   externalConfig: false
   existingSecret: false
   createSecret: true
@@ -140,46 +140,46 @@ configs:
     policy.matchMode: "glob"
 
 server:
-  replicas: 1
+  replicas: ${ARGOCD_SERVER_REPLICAS}
   resources:
     requests:
-      cpu: 80m
-      memory: 100Mi
+      cpu: ${ARGOCD_SERVER_CPU}
+      memory: ${ARGOCD_SERVER_MEMORY}
   certificate:
     enabled: false
     issuer:
       kind: "ClusterIssuer"
-      name: "letsencrypt-cloudflare-dns"
+      name: "${CLUSTER_ISSUER}"
   ingress:
     enabled: false
 
 controller:
-  replicas: 1
+  replicas: ${ARGOCD_CONTROLLER_REPLICAS}
   resources:
     requests:
-      cpu: 80m
-      memory: 100Mi
+      cpu: ${ARGOCD_CONTROLLER_CPU}
+      memory: ${ARGOCD_CONTROLLER_MEMORY}
   dynamicClusterDistribution: false
   heartbeatTime: 10
 
 repoServer:
-  replicas: 1
+  replicas: ${ARGOCD_REPO_SERVER_REPLICAS}
   resources:
     requests:
-      cpu: 40m
-      memory: 50Mi
+      cpu: ${ARGOCD_REPO_SERVER_CPU}
+      memory: ${ARGOCD_REPO_SERVER_MEMORY}
   containerPorts:
     server: 8081
     metrics: 8084
 
 applicationSet:
-  replicas: 1
+  replicas: ${ARGOCD_APPLICATION_SET_REPLICAS}
   resources:
     requests:
-      cpu: 40m
-      memory: 50Mi
+      cpu: ${ARGOCD_APPLICATION_SET_CPU}
+      memory: ${ARGOCD_APPLICATION_SET_MEMORY}
   metrics:
-    enabled: true
+    enabled: false
   containerPorts:
     metrics: 8080
     probe: 8081
@@ -189,8 +189,8 @@ notifications:
   enabled: true
   resources:
     requests:
-      cpu: 40m
-      memory: 50Mi
+      cpu: ${ARGOCD_NOTIFICATIONS_CPU}
+      memory: ${ARGOCD_NOTIFICATIONS_MEMORY}
 
 dex:
   enabled: false

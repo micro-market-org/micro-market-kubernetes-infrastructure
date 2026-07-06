@@ -10,10 +10,24 @@ locals {
   auth_domain = var.auth_domain != "" ? var.auth_domain : "auth.${var.real_domain}"
 
   argocd_oidc_client_secret = (
-    var.cloud_provider == "azure" ? try(data.terraform_remote_state.azure[0].outputs.argocd_oidc_client_secret, random_password.argo_oidc_client_secret.result) :
-    var.cloud_provider == "gcp" ? try(data.terraform_remote_state.gcp[0].outputs.argocd_oidc_client_secret, random_password.argo_oidc_client_secret.result) :
-    var.cloud_provider == "aws" ? try(data.terraform_remote_state.aws[0].outputs.argocd_oidc_client_secret, random_password.argo_oidc_client_secret.result) :
-    random_password.argo_oidc_client_secret.result
+    var.cloud_provider == "azure" ? try(data.terraform_remote_state.azure[0].outputs.argocd_oidc_client_secret, "") :
+    var.cloud_provider == "gcp" ? try(data.terraform_remote_state.gcp[0].outputs.argocd_oidc_client_secret, "") :
+    var.cloud_provider == "aws" ? try(data.terraform_remote_state.aws[0].outputs.argocd_oidc_client_secret, "") :
+    ""
+  )
+
+  argocd_admin_password = (
+    var.cloud_provider == "azure" ? try(data.terraform_remote_state.azure[0].outputs.argocd_admin_password, "") :
+    var.cloud_provider == "gcp" ? try(data.terraform_remote_state.gcp[0].outputs.argocd_admin_password, "") :
+    var.cloud_provider == "aws" ? try(data.terraform_remote_state.aws[0].outputs.argocd_admin_password, "") :
+    ""
+  )
+
+  argocd_redis_password = (
+    var.cloud_provider == "azure" ? try(data.terraform_remote_state.azure[0].outputs.argocd_redis_password, "") :
+    var.cloud_provider == "gcp" ? try(data.terraform_remote_state.gcp[0].outputs.argocd_redis_password, "") :
+    var.cloud_provider == "aws" ? try(data.terraform_remote_state.aws[0].outputs.argocd_redis_password, "") :
+    ""
   )
 
   aws_secret_prefix = (

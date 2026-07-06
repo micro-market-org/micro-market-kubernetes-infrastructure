@@ -19,6 +19,13 @@ Beyond that, `bootstrap.tf` creates:
 
 There is currently no other ArgoCD resource created by this repo's Terraform — every platform add-on and every per-environment microservice deployment is the responsibility of the two resources above, resolved by ArgoCD at sync time.
 
+The only file that remains under `terraform/kubernetes/configs/` is
+`argocd_config.yaml.template`, which is still active: `argocd.tf` passes it to
+the ArgoCD Helm release as values. Older monitoring, Loki, Prometheus,
+Alertmanager, Alloy, network-policy, and AppProject YAML files were removed
+after the GitOps split because their live equivalents now belong in
+`platform-gitops` or are rendered inline by Terraform.
+
 ## The `microservices` ApplicationSet — matrix generator mechanics
 
 This is the most structurally interesting piece of this repo. It uses ArgoCD's **matrix generator**: an inline **list generator** of the 4 apps crossed with an inline **list generator** of the 3 environments —
@@ -47,10 +54,15 @@ The `platform-root` Application follows the same "Terraform creates a `kubernete
 
 Same shape and cloud-parameterization pattern as `../infrastructure`: stages `validate → plan → apply (manual) → destroy (manual)`, backend selection via `backends/{azurerm,gcs,s3}.{tf,hcl}` copied to a gitignored `backend_override.tf` and `terraform init -reconfigure -backend-config=...`. A `checkov` job runs in `validate`, independent of the `validate` (fmt+validate) job, scanning `terraform/`.
 
+For AWS, CI uses GitLab OIDC rather than static AWS keys: `AWS_ROLE_ARN` points
+at an IAM role trusted by the `kubernetes-infrastructure` protected branch,
+GitLab provides `GITLAB_OIDC_TOKEN`, and the pipeline exchanges it for one-hour
+STS credentials before running Terraform and `aws eks get-token`.
+
 ## Destroy order and ArgoCD cascade cleanup
 
 Before running a Kubernetes-layer destroy, run `terraform/kubernetes/destroy_argocd_apps.sh` against the target cluster. The helper deletes the `microservices` ApplicationSet, its 12 generated microservice Applications, and `platform-root` with ArgoCD foreground finalizers so ArgoCD prunes managed resources before Terraform removes the bootstrap layer. This implements the pre-destroy cascade-delete step called out in the root runbook.
 
 ## `.checkov.yaml` — much shorter than `infrastructure`'s
 
-`skip-check: []` — empty. This root is intentionally tiny after the Phase 2 bootstrap-only shrink (namespaces + ArgoCD + two `kubernetes_manifest` resources, nothing else), so a full checkov run comes back with zero findings; there's nothing to document a skip for. The file exists purely so the CI `checkov` job has a stable, version-controlled config to point at, with a comment explaining the pattern to follow (`../infrastructure/.checkov.yaml`) if a future change ever introduces a genuine, accepted finding here. One pre-existing false positive (`CKV_SECRET_6` on a `configSecret: "alertmanager-config"` line in `configs/kube-prometheus_config.yaml` — a Kubernetes Secret *name*, not a value, that happened to trip the generic high-entropy-string check) is suppressed inline rather than repo-wide, so real secret-value detection stays active everywhere else.
+`skip-check: []` — empty. This root is intentionally tiny after the Phase 2 bootstrap-only shrink (namespaces + ArgoCD + two `kubernetes_manifest` resources, nothing else), so a full checkov run comes back with zero findings; there's nothing to document a skip for. The file exists purely so the CI `checkov` job has a stable, version-controlled config to point at, with a comment explaining the pattern to follow (`../infrastructure/.checkov.yaml`) if a future change ever introduces a genuine, accepted finding here.

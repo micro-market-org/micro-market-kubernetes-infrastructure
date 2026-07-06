@@ -15,13 +15,7 @@
 # comment explaining why it's fixed vs. accepted for this dissertation lab
 # rather than fixed in Terraform).
 #
-# One pre-existing false positive was found and resolved with an inline
-# suppression instead of a config-file skip (CKV_SECRET_6 doesn't apply
-# check-ID-wide across the whole repo the same way a Terraform check does -
-# a blanket skip here would blind real secret-value detection everywhere):
-# terraform/kubernetes/configs/kube-prometheus_config.yaml's `configSecret:
-# "alertmanager-config"` line is the *name* of a Kubernetes Secret created
-# elsewhere, not a credential value, but its moderate string entropy
-# triggered checkov's generic "Base64 High Entropy String" secrets check.
+# Keep this list empty unless a future bootstrap-only Terraform change introduces
+# a genuine accepted finding with a narrow, documented reason.
 
 skip-check: []
