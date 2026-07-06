@@ -40,7 +40,7 @@ variable "gcp_remote_state_prefix" {
 variable "aws_remote_state_bucket" {
   description = "AWS bucket name for remote state"
   type        = string
-  default     = "terraform-microservices1691715-state"
+  default     = ""
 }
 
 variable "aws_remote_state_key" {

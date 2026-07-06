@@ -4,7 +4,9 @@ include:
 secret_detection:
   stage: validate
 
-image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
+image:
+  name: hashicorp/terraform:1.12
+  entrypoint: [""]
 
 default:
   id_tokens:
@@ -23,7 +25,6 @@ variables:
   TF_PLUGIN_CACHE_DIR: "$CI_PROJECT_DIR/.terraform.d/plugin-cache"
   CLOUD_PROVIDER: ${CLOUD_PROVIDER:-azure}
   TF_ROOT: terraform/kubernetes
-  WORKSPACE: ${CI_COMMIT_REF_NAME}
 
 .terraform-cache: &terraform-cache
   cache:
@@ -35,11 +36,9 @@ variables:
 
 .configure-environment: &configure-environment
   - mkdir -p $TF_PLUGIN_CACHE_DIR
+  - WORKSPACE="${ENVIRONMENT:-dev}"
+  - echo "Using workspace: $WORKSPACE"
   - |
-    # Normalize workspace name from branch
-    WORKSPACE=$(echo ${WORKSPACE} | tr -cd '[:alnum:]-' | tr '[:upper:]' '[:lower:]')
-    echo "Using workspace: $WORKSPACE"
-    
     # Configure provider-specific variables
     case "${CLOUD_PROVIDER}" in
       aws)
@@ -96,7 +95,7 @@ variables:
       aws)
         terraform init -reconfigure \
           -backend-config="backends/s3.hcl" \
-          -backend-config="key=kubernetes/aws/${WORKSPACE}/terraform.tfstate"
+          -backend-config="key=kubernetes/aws/${ENVIRONMENT:-dev}/terraform.tfstate"
         ;;
       azure)
         terraform init -reconfigure \
@@ -153,7 +152,7 @@ plan:
     - *initialize-terraform
   script:
     - echo "Planning Terraform infrastructure changes..."
-    - terraform plan --var-file=./tfvars_files/$WORKSPACE.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME" -out=tfplan
+    - terraform plan --var-file=./tfvars_files/${ENVIRONMENT:-dev}.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME" -out=tfplan
     - terraform show -json tfplan > plan.json
     - echo "Terraform plan completed and saved to tfplan."
   artifacts:
@@ -192,9 +191,9 @@ destroy:
     - *initialize-terraform
   script:
     - echo "Planning infrastructure destruction (dry-run)..."
-    - terraform plan -destroy --var-file=./tfvars_files/$WORKSPACE.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME"
+    - terraform plan -destroy --var-file=./tfvars_files/${ENVIRONMENT:-dev}.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME"
     - echo "Executing infrastructure destruction..."
-    - terraform destroy -auto-approve --var-file=./tfvars_files/$WORKSPACE.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME"
+    - terraform destroy -auto-approve --var-file=./tfvars_files/${ENVIRONMENT:-dev}.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME"
     - echo "Terraform destroy completed successfully."
   environment:
     name: ${WORKSPACE}
