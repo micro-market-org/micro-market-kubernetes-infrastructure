@@ -29,5 +29,6 @@ kubeconfig.*
 # Environment-specific files
 .env
 .env.*
+!.env.example
 *.auto.tfvars
 *.tfvars.local

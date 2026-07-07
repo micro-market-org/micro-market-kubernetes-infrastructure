@@ -8,10 +8,19 @@ REAL_DOMAIN="${REAL_DOMAIN:-danielgherasim.com}"
 CLUSTER_ISSUER="${CLUSTER_ISSUER:-letsencrypt-cloudflare-dns}"
 VAR_FILE="./tfvars_files/${ENVIRONMENT}.tfvars"
 
-# Required — must be set in the caller's environment
-: "${AWS_TF_STATE_BUCKET:?Set AWS_TF_STATE_BUCKET to the S3 bucket that holds Terraform state}"
-: "${GITLAB_TOKEN:?Set GITLAB_TOKEN to a GitLab personal access token with read_repository scope}"
-: "${GITLAB_USERNAME:?Set GITLAB_USERNAME to your GitLab username}"
+# Load secrets from .env if present (never committed — see .gitignore)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/../../.env"
+if [[ -f "${ENV_FILE}" ]]; then
+  set -o allexport
+  # shellcheck source=/dev/null
+  source "${ENV_FILE}"
+  set +o allexport
+fi
+
+: "${AWS_TF_STATE_BUCKET:?Set AWS_TF_STATE_BUCKET in .env or export it}"
+: "${GITLAB_TOKEN:?Set GITLAB_TOKEN in .env or export it}"
+: "${GITLAB_USERNAME:?Set GITLAB_USERNAME in .env or export it}"
 
 STATE_KEY="kubernetes/aws/${ENVIRONMENT}/terraform.tfstate"
 
