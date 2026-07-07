@@ -5,7 +5,7 @@ secret_detection:
   stage: validate
 
 image:
-  name: hashicorp/terraform:1.12
+  name: registry.gitlab.com/microservices1691715/utilities/terraform-aws:latest
   entrypoint: [""]
 
 default:
@@ -41,7 +41,6 @@ variables:
       case "${CLOUD_PROVIDER}" in
         aws)
           : "${AWS_ROLE_ARN:?Set AWS_ROLE_ARN to the AWS IAM role trusted by GitLab OIDC}"
-          apk add --no-cache aws-cli jq
           CREDS=$(aws sts assume-role-with-web-identity \
             --role-arn "${AWS_ROLE_ARN}" \
             --role-session-name "gitlab-${CI_PROJECT_ID}-${CI_PIPELINE_ID}" \
