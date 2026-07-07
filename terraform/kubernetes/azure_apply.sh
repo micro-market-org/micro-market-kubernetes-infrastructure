@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ENVIRONMENT="${ENVIRONMENT:-prod}"
+PROJECT_NAMESPACE="${PROJECT_NAMESPACE:-danielgherasim-microservices}"
+CLOUD_PROVIDER="${CLOUD_PROVIDER:-azure}"
+
+if [ -z "${ARM_CLIENT_ID:-}" ] || [ -z "${ARM_CLIENT_SECRET:-}" ] || [ -z "${ARM_TENANT_ID:-}" ] || [ -z "${ARM_SUBSCRIPTION_ID:-}" ]; then
+  echo "Error: Azure credentials not set. Set ARM_CLIENT_ID, ARM_CLIENT_SECRET, ARM_TENANT_ID, and ARM_SUBSCRIPTION_ID." >&2
+  exit 1
+fi
+
+if [ -z "${GITLAB_ACCESS_TOKEN:-}" ] || [ -z "${GITLAB_USERNAME:-}" ]; then
+  echo "Error: GitLab credentials not set. Set GITLAB_ACCESS_TOKEN and GITLAB_USERNAME." >&2
+  exit 1
+fi
+
+echo "=== [INFO] Deploying to environment: $ENVIRONMENT ==="
+echo "=== [INFO] Project namespace: $PROJECT_NAMESPACE ==="
+
+export TF_VAR_client_id=$ARM_CLIENT_ID
+export TF_VAR_client_secret=$ARM_CLIENT_SECRET
+export TF_VAR_tenant_id=$ARM_TENANT_ID
+export TF_VAR_subscription_id=$ARM_SUBSCRIPTION_ID
+export TF_VAR_cloud_provider=$CLOUD_PROVIDER
+export TF_VAR_project_name=$PROJECT_NAMESPACE
+export TF_VAR_environment=$ENVIRONMENT
+
+echo "=== [INFO] Initializing Terraform ==="
+cp backends/azurerm.tf backend_override.tf
+terraform init -reconfigure -backend-config="backends/azurerm.hcl"
+
+echo "=== [INFO] Selecting workspace: $ENVIRONMENT ==="
+terraform workspace select "$ENVIRONMENT" || terraform workspace new "$ENVIRONMENT"
+
+echo "=== [INFO] Creating Terraform plan ==="
+terraform plan --var-file=./tfvars_files/$ENVIRONMENT.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME" -out=tfplan
+
+echo ""
+echo "=== [CONFIRMATION] Do you want to apply these changes? (yes/no) ==="
+read -r confirmation
+
+confirmation=$(echo "$confirmation" | tr '[:upper:]' '[:lower:]')
+
+if [[ "$confirmation" == "yes" ]]; then
+  echo "=== [INFO] Applying Terraform plan ==="
+  terraform apply -auto-approve tfplan
+  echo "=== [SUCCESS] Deployment completed successfully ==="
+else
+  echo "=== [INFO] Deployment cancelled by user ==="
+  exit 0
+fi

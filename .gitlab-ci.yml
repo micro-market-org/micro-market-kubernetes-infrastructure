@@ -1,193 +1,174 @@
-image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
+include:
+  - template: Security/Secret-Detection.gitlab-ci.yml
+
+secret_detection:
+  stage: validate
+
+image:
+  name: hashicorp/terraform:1.12
+  entrypoint: [""]
+
+default:
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://gitlab.com
 
 stages:
   - validate
   - plan
   - apply
+  - destroy
 
 variables:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_PLUGIN_CACHE_DIR: "$CI_PROJECT_DIR/.terraform.d/plugin-cache"
   CLOUD_PROVIDER: ${CLOUD_PROVIDER:-azure}
+  TF_ROOT: terraform/kubernetes
 
-.terraform-cache: &terraform-cache
+.terraform-base:
   cache:
     key: ${CI_COMMIT_REF_SLUG}-${CLOUD_PROVIDER}
     paths:
-      - terraform/kubernetes/.terraform
+      - ${TF_ROOT}/.terraform
       - .terraform.d/plugin-cache
     policy: pull-push
-
-.before_script_common: &before_script_common
-  - 'echo "=== [DEBUG] Cloud provider: ${CLOUD_PROVIDER} ==="'
-  - mkdir -p $TF_PLUGIN_CACHE_DIR
-  - |
-    # Set up workspace based on branch name
-    WORKSPACE=$(echo ${CI_COMMIT_REF_NAME} | tr -cd '[:alnum:]-' | tr '[:upper:]' '[:lower:]')
-    echo "Using workspace: $WORKSPACE"
-
-    # Set up provider-specific environment variables
-    case "${CLOUD_PROVIDER}" in
-      aws)
-        export TF_VAR_aws_access_key=$AWS_ACCESS_KEY_ID
-        export TF_VAR_aws_secret_key=$AWS_SECRET_ACCESS_KEY
-        export TF_VAR_aws_session_token=$AWS_SESSION_TOKEN
-        export TF_VAR_aws_region=${AWS_REGION:-us-east-1}
-        export TF_VAR_cloud_provider="aws"
-        export BACKEND_TYPE="s3"
-        ;;
-      azure)
-        export TF_VAR_client_id=$ARM_CLIENT_ID
-        export TF_VAR_client_secret=$ARM_CLIENT_SECRET
-        export TF_VAR_tenant_id=$ARM_TENANT_ID
-        export TF_VAR_subscription_id=$ARM_SUBSCRIPTION_ID
-        export TF_VAR_cloud_provider="azure"
-        export BACKEND_TYPE="azurerm"
-        ;;
-      gcp)
-        echo "$GCP_SERVICE_ACCOUNT_KEY" > gcp-credentials.json
-        export GOOGLE_APPLICATION_CREDENTIALS="$CI_PROJECT_DIR/gcp-credentials.json"
-        export TF_VAR_gcp_credentials="$CI_PROJECT_DIR/gcp-credentials.json"
-        export TF_VAR_gcp_project=$GCP_PROJECT_ID
-        export TF_VAR_gcp_region=${GCP_REGION:-europe-central2}
-        export TF_VAR_gcp_zone=${GCP_ZONE:-europe-central2-a}
-        export TF_VAR_cloud_provider="gcp"
-        export BACKEND_TYPE="gcs"
-        ;;
-      *)
-        echo "Unsupported cloud provider: ${CLOUD_PROVIDER}. Must be one of: aws, azure, gcp"
-        exit 1
-        ;;
-    esac
-
-validate:
-  stage: validate
-  <<: *terraform-cache
   before_script:
-    - *before_script_common
-    - cd terraform/kubernetes
-    - sed -i "s/BACKEND_PLACEHOLDER/${BACKEND_TYPE}/g" main.tf
-  script:
+    - mkdir -p $TF_PLUGIN_CACHE_DIR
+    - WORKSPACE="${ENVIRONMENT:-dev}"
+    - echo "Using workspace $WORKSPACE"
     - |
       case "${CLOUD_PROVIDER}" in
         aws)
-          terraform init \
-            -backend-config="bucket=terraform-microservices1691715-state" \
-            -backend-config="key=terraform.tfstate" \
-            -backend-config="region=${TF_VAR_aws_region}" \
-            -backend-config="access_key=${TF_VAR_aws_access_key}" \
-            -backend-config="secret_key=${TF_VAR_aws_secret_key}" \
-            -backend-config="token=${TF_VAR_aws_session_token}"
+          : "${AWS_ROLE_ARN:?Set AWS_ROLE_ARN to the AWS IAM role trusted by GitLab OIDC}"
+          apk add --no-cache aws-cli jq
+          CREDS=$(aws sts assume-role-with-web-identity \
+            --role-arn "${AWS_ROLE_ARN}" \
+            --role-session-name "gitlab-${CI_PROJECT_ID}-${CI_PIPELINE_ID}" \
+            --web-identity-token "${GITLAB_OIDC_TOKEN}" \
+            --duration-seconds 3600)
+          export AWS_ACCESS_KEY_ID=$(echo "${CREDS}" | jq -r '.Credentials.AccessKeyId')
+          export AWS_SECRET_ACCESS_KEY=$(echo "${CREDS}" | jq -r '.Credentials.SecretAccessKey')
+          export AWS_SESSION_TOKEN=$(echo "${CREDS}" | jq -r '.Credentials.SessionToken')
+          export TF_VAR_aws_region=${AWS_REGION:-eu-central-1}
+          export TF_VAR_cloud_provider="aws"
+          export BACKEND_TYPE="s3"
           ;;
         azure)
-          terraform init -backend-config="config.azure.tfbackend"
+          export TF_VAR_client_id=$ARM_CLIENT_ID
+          export TF_VAR_client_secret=$ARM_CLIENT_SECRET
+          export TF_VAR_tenant_id=$ARM_TENANT_ID
+          export TF_VAR_subscription_id=$ARM_SUBSCRIPTION_ID
+          export TF_VAR_cloud_provider="azure"
+          export BACKEND_TYPE="azurerm"
           ;;
         gcp)
-          terraform init \
-            -backend-config="bucket=terraformmicroservicesstate" \
-            -backend-config="prefix=kubernetes/state" \
-            -backend-config="credentials=${TF_VAR_gcp_credentials}"
+          echo "$GCP_SERVICE_ACCOUNT_KEY" > gcp-credentials.json
+          export GOOGLE_APPLICATION_CREDENTIALS="$CI_PROJECT_DIR/gcp-credentials.json"
+          export TF_VAR_gcp_credentials="$CI_PROJECT_DIR/gcp-credentials.json"
+          export TF_VAR_gcp_project=$GCP_PROJECT_ID
+          export TF_VAR_gcp_region=${GCP_REGION:-europe-central2}
+          export TF_VAR_gcp_zone=${GCP_ZONE:-europe-central2-a}
+          export TF_VAR_cloud_provider="gcp"
+          export BACKEND_TYPE="gcs"
+          ;;
+        *)
+          echo "ERROR: Unsupported cloud provider: ${CLOUD_PROVIDER}. Must be one of: aws, azure, gcp"
+          exit 1
           ;;
       esac
-    - terraform validate
-    - terraform fmt -check -diff
-
-plan:
-  stage: plan
-  <<: *terraform-cache
-  before_script:
-    - *before_script_common
-    - cd terraform/kubernetes
-    - sed -i "s/BACKEND_PLACEHOLDER/${BACKEND_TYPE}/g" main.tf
-  script:
+    - cd ${TF_ROOT}
+    - echo "Initializing Terraform with ${BACKEND_TYPE} backend..."
+    - cp "backends/${BACKEND_TYPE}.tf" backend_override.tf
     - |
       case "${CLOUD_PROVIDER}" in
         aws)
-          terraform init \
-            -backend-config="bucket=terraform-microservices1691715-state" \
-            -backend-config="key=terraform.tfstate" \
-            -backend-config="region=${TF_VAR_aws_region}" \
-            -backend-config="access_key=${TF_VAR_aws_access_key}" \
-            -backend-config="secret_key=${TF_VAR_aws_secret_key}" \
-            -backend-config="token=${TF_VAR_aws_session_token}"
+          terraform init -reconfigure \
+            -backend-config="backends/s3.hcl" \
+            -backend-config="key=kubernetes/aws/${ENVIRONMENT:-dev}/terraform.tfstate"
           ;;
         azure)
-          terraform init -backend-config="config.azure.tfbackend"
+          terraform init -reconfigure \
+            -backend-config="backends/azurerm.hcl"
           ;;
         gcp)
-          terraform init \
-            -backend-config="bucket=terraformmicroservicesstate" \
-            -backend-config="prefix=kubernetes/state" \
-            -backend-config="credentials=${TF_VAR_gcp_credentials}"
+          terraform init -reconfigure \
+            -backend-config="backends/gcs.hcl"
           ;;
       esac
     - |
       if ! terraform workspace list | grep -q "$WORKSPACE"; then
+        echo "Creating new workspace: $WORKSPACE"
         terraform workspace new "$WORKSPACE"
+      else
+        echo "Selecting existing workspace: $WORKSPACE"
+        terraform workspace select "$WORKSPACE"
       fi
-      terraform workspace select "$WORKSPACE"
-    - terraform plan --var-file=./tfvars_files/$WORKSPACE.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME" -out=tfplan
+      echo "Current workspace: $(terraform workspace show)"
+
+validate:
+  stage: validate
+  extends: .terraform-base
+  script:
+    - echo "Validating Terraform configuration..."
+    - terraform validate
+    - terraform fmt -check -diff -recursive
+    - echo "Terraform validation completed successfully."
+
+checkov:
+  stage: validate
+  image:
+    name: bridgecrew/checkov:latest
+    entrypoint: [""]
+  script:
+    - checkov -d terraform/ --config-file .checkov.yaml --compact --quiet
+
+plan:
+  stage: plan
+  extends: .terraform-base
+  script:
+    - echo "Planning Terraform infrastructure changes..."
+    - terraform plan --var-file=./tfvars_files/${ENVIRONMENT:-dev}.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME" -out=tfplan
     - terraform show -json tfplan > plan.json
+    - echo "Terraform plan completed and saved to tfplan."
   artifacts:
     paths:
-      - terraform/kubernetes/tfplan
-      - terraform/kubernetes/plan.json
+      - ${TF_ROOT}/tfplan
+      - ${TF_ROOT}/plan.json
     reports:
-      terraform: terraform/kubernetes/plan.json
+      terraform: ${TF_ROOT}/plan.json
+    expire_in: 1 week
 
 apply:
   stage: apply
-  <<: *terraform-cache
+  extends: .terraform-base
   when: manual
-  before_script:
-    - *before_script_common
-    - cd terraform/kubernetes
-    - sed -i "s/BACKEND_PLACEHOLDER/${BACKEND_TYPE}/g" main.tf
   script:
-    - |
-      case "${CLOUD_PROVIDER}" in
-        aws)
-          terraform init \
-            -backend-config="bucket=terraform-microservices1691715-state" \
-            -backend-config="key=terraform.tfstate" \
-            -backend-config="region=${TF_VAR_aws_region}" \
-            -backend-config="access_key=${TF_VAR_aws_access_key}" \
-            -backend-config="secret_key=${TF_VAR_aws_secret_key}" \
-            -backend-config="token=${TF_VAR_aws_session_token}"
-          ;;
-        azure)
-          terraform init -backend-config="config.azure.tfbackend"
-          ;;
-        gcp)
-          terraform init \
-            -backend-config="bucket=terraformmicroservicesstate" \
-            -backend-config="prefix=kubernetes/state" \
-            -backend-config="credentials=${TF_VAR_gcp_credentials}"
-          ;;
-      esac
-    - |
-      terraform workspace select "$WORKSPACE" || terraform workspace new "$WORKSPACE"
+    - echo "Applying Terraform infrastructure changes..."
     - terraform apply -auto-approve tfplan
-    - |
-      if [ "${CLOUD_PROVIDER}" = "azure" ]; then
-        kubectl apply -f ./configs/production_issuer.yaml
-        kubectl apply -f ./configs/argocd_network_policies.yaml
-        kubectl apply -f ./configs/prometheus_recording_rules.yaml
-        kubectl apply -f ./configs/prometheus_alerting_rules.yaml
-        kubectl apply -f ./configs/argocd_project.yaml
-
-        cat ./configs/argocd_application.yaml.template | \
-          sed "s/\${ENV}/$WORKSPACE/g" | \
-          sed "s/\${REGISTRY}/$CONTAINER_REGISTRY_NAME/g" | \
-          sed "s/\${PROJECT_NAME}/$PROJECT_NAMESPACE/g" | \
-          sed "s/\${PROVIDER}/$CLOUD_PROVIDER/g" > ./configs/argocd_application.yaml
-
-        kubectl apply -f ./configs/argocd_application.yaml
-
-        PUBLIC_IP_NAME=$(az network public-ip list --resource-group rg-$PROJECT_NAMESPACE-$WORKSPACE-aks --query "[?contains(name, 'kubernetes-')].name" -o tsv)
-        az network public-ip update --resource-group rg-$PROJECT_NAMESPACE-$WORKSPACE-aks --name $PUBLIC_IP_NAME --dns-name $PROJECT_NAMESPACE
-      fi
+    - echo "Terraform apply completed successfully."
   dependencies:
     - plan
-  needs: [ plan ]
+  needs:
+    - plan
+  environment:
+    name: ${WORKSPACE}
+    on_stop: destroy
+
+destroy:
+  stage: destroy
+  extends: .terraform-base
+  when: manual
+  script:
+    - echo "Planning infrastructure destruction (dry-run)..."
+    - terraform plan -destroy --var-file=./tfvars_files/${ENVIRONMENT:-dev}.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME"
+    - echo "Executing infrastructure destruction..."
+    - terraform destroy -auto-approve --var-file=./tfvars_files/${ENVIRONMENT:-dev}.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME"
+    - echo "Terraform destroy completed successfully."
+  environment:
+    name: ${WORKSPACE}
+    action: stop
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+      when: manual
+      allow_failure: true

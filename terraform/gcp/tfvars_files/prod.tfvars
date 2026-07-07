@@ -1,0 +1,19 @@
+environment    = "prod"
+cluster_issuer = "letsencrypt-cloudflare-dns"
+
+argocd_server_replicas                           = 1
+argocd_server_resources_requests_memory          = "100Mi"
+argocd_server_resources_requests_cpu             = "80m"
+argocd_controller_replicas                       = 1
+argocd_controller_resources_requests_memory      = "100Mi"
+argocd_controller_resources_requests_cpu         = "80m"
+argocd_repo_server_replicas                      = 1
+argocd_repo_server_resources_requests_memory     = "50Mi"
+argocd_repo_server_resources_requests_cpu        = "40m"
+argocd_application_set_replicas                  = 1
+argocd_application_set_resources_requests_memory = "50Mi"
+argocd_application_set_resources_requests_cpu    = "40m"
+argocd_notifications_resources_requests_memory   = "50Mi"
+argocd_notifications_resources_requests_cpu      = "40m"
+argocd_redis_resources_requests_memory           = "50Mi"
+argocd_redis_resources_requests_cpu              = "40m"

@@ -9,13 +9,7 @@ output "domain" {
 }
 
 output "argocd_admin_password" {
-  value       = random_password.argo_password.result
-  description = "The admin password for ArgoCD"
-  sensitive   = true
-}
-
-output "grafana_admin_password" {
-  value       = random_password.grafana_password.result
-  description = "The admin password for Grafana"
+  value       = local.argocd_admin_password
+  description = "The admin password for ArgoCD (sourced from cloud secret manager via remote state)"
   sensitive   = true
 }

@@ -1,0 +1,21 @@
+# Checkov configuration for the `kubernetes-infrastructure` Terraform repo
+# (terraform/kubernetes - the ArgoCD/cluster-bootstrap root).
+#
+# This root is intentionally tiny after the Phase 2 "shrink to bootstrap-only"
+# rework (see plans/2026-07-03-multicloud-platform-overhaul.md): it only
+# creates namespaces, ArgoCD itself, and the platform-root Application, with
+# all add-ons managed by ArgoCD from the separate `platform-gitops` repo.
+# A full checkov run against terraform/ here comes back clean with no
+# findings, so there are no skip-check entries to document. This file exists
+# so the `checkov` CI validate job (see .gitlab-ci.yml) has a stable,
+# version-controlled config to point at, and so a skip can be added here with
+# a documented reason if a future change introduces a genuine, accepted
+# lab-scope finding - see `infrastructure/.checkov.yaml` in the sibling repo
+# for the pattern to follow (one skip-check entry per check ID, each with a
+# comment explaining why it's fixed vs. accepted for this dissertation lab
+# rather than fixed in Terraform).
+#
+# Keep this list empty unless a future bootstrap-only Terraform change introduces
+# a genuine accepted finding with a narrow, documented reason.
+
+skip-check: []

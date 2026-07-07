@@ -1,0 +1,4 @@
+resource_group_name  = "rg-infrastructure"
+storage_account_name = "terraformmicrostate"
+container_name       = "tfstate"
+key                  = "kubernetes.tfstate"
