@@ -9,6 +9,8 @@ CLUSTER_ISSUER="${CLUSTER_ISSUER:-letsencrypt-cloudflare-dns}"
 STATE_KEY="${TF_STATE_KEY:-kubernetes/aws/${ENVIRONMENT}/terraform.tfstate}"
 VAR_FILE="./tfvars_files/${ENVIRONMENT}.tfvars"
 
+: "${AWS_TF_STATE_BUCKET:?Set AWS_TF_STATE_BUCKET in .env or export it}"
+
 if [[ ! -f "${VAR_FILE}" ]]; then
   echo "Missing variable file: ${VAR_FILE}" >&2
   exit 1
@@ -18,6 +20,7 @@ fi
 cp backends/s3.tf backend_override.tf
 terraform init -reconfigure \
   -backend-config="backends/s3.hcl" \
+  -backend-config="bucket=${AWS_TF_STATE_BUCKET}" \
   -backend-config="key=${STATE_KEY}"
 
 terraform plan -destroy \

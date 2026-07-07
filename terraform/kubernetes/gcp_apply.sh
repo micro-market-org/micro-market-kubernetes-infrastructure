@@ -21,7 +21,7 @@ fi
 export USE_GKE_GCLOUD_AUTH_PLUGIN=True
 
 gcloud container clusters get-credentials "gke-${PROJECT_NAMESPACE}-${ENVIRONMENT}" \
-  --region="${GCP_ZONE}" --project="${GCP_PROJECT_ID}"
+  --zone="${GCP_ZONE}" --project="${GCP_PROJECT_ID}"
 
 cp backends/gcs.tf backend_override.tf
 terraform init -reconfigure -backend-config="backends/gcs.hcl"

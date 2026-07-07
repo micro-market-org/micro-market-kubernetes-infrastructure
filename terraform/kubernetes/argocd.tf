@@ -46,7 +46,10 @@ resource "helm_release" "argocd" {
       ARGOCD_NOTIFICATIONS_MEMORY     = var.argocd_notifications_resources_requests_memory,
       ARGOCD_REDIS_CPU                = var.argocd_redis_resources_requests_cpu,
       ARGOCD_REDIS_MEMORY             = var.argocd_redis_resources_requests_memory
-    })
+    }),
+    yamlencode({
+      extraObjects = local.argocd_bootstrap_objects
+    }),
   ]
   timeout = 200
 

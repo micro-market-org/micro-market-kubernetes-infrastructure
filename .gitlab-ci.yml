@@ -23,7 +23,7 @@ variables:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_PLUGIN_CACHE_DIR: "$CI_PROJECT_DIR/.terraform.d/plugin-cache"
-  CLOUD_PROVIDER: ${CLOUD_PROVIDER:-azure}
+  ENVIRONMENT: "dev"
   TF_ROOT: terraform/kubernetes
 
 .terraform-base:
@@ -35,6 +35,7 @@ variables:
     policy: pull-push
   before_script:
     - mkdir -p $TF_PLUGIN_CACHE_DIR
+    - ': "${CLOUD_PROVIDER:?Set CLOUD_PROVIDER to one of: aws, azure, gcp}"'
     - WORKSPACE="${ENVIRONMENT:-dev}"
     - echo "Using workspace $WORKSPACE"
     - |
@@ -154,7 +155,7 @@ apply:
   needs:
     - plan
   environment:
-    name: ${WORKSPACE}
+    name: ${ENVIRONMENT}
     on_stop: destroy
 
 destroy:
@@ -168,7 +169,7 @@ destroy:
     - terraform destroy -auto-approve --var-file=./tfvars_files/${ENVIRONMENT:-dev}.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME"
     - echo "Terraform destroy completed successfully."
   environment:
-    name: ${WORKSPACE}
+    name: ${ENVIRONMENT}
     action: stop
   rules:
     - if: '$CI_COMMIT_BRANCH'

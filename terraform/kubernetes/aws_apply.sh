@@ -54,7 +54,7 @@ terraform plan \
   -var aws_remote_state_bucket="${AWS_TF_STATE_BUCKET}" \
   -var gitlab_token="${GITLAB_TOKEN}" \
   -var gitlab_username="${GITLAB_USERNAME}" \
-  -out=tfplan
+  -out=tfplan -lock=false
 
 echo
 read -rp "Apply the plan above? [y/N] " CONFIRM
