@@ -1,5 +1,5 @@
-bucket       = "terraform-microservices1691715-state"
-region       = "us-east-1"
+region       = "eu-central-1"
 use_lockfile = true
-# key is environment-specific and passed on the command line:
+# bucket and key are passed on the command line so they stay account-ID-agnostic:
+#   -backend-config="bucket=terraform-state-<account-id>-eu-central-1"
 #   -backend-config="key=kubernetes/aws/<env>/terraform.tfstate"
