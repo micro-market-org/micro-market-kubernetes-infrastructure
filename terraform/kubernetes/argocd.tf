@@ -47,11 +47,9 @@ resource "helm_release" "argocd" {
       ARGOCD_REDIS_CPU                = var.argocd_redis_resources_requests_cpu,
       ARGOCD_REDIS_MEMORY             = var.argocd_redis_resources_requests_memory
     }),
-    yamlencode({
-      extraObjects = local.argocd_bootstrap_objects
-    }),
   ]
-  timeout = 200
+  timeout         = 900
+  cleanup_on_fail = true
 
   set = [
     { name = "configs.secret.createSecret", value = "true" },
@@ -68,5 +66,24 @@ resource "helm_release" "argocd" {
     { name = "configs.credentialTemplates.platform-gitops.password", value = var.gitlab_token },
     { name = "configs.secret.extra.argo-oidc-client-secret", value = local.argocd_oidc_client_secret },
     { name = "redis.password", value = local.argocd_redis_password },
+  ]
+}
+
+resource "helm_release" "argocd_bootstrap" {
+  name             = "argocd-bootstrap"
+  chart            = "${path.root}/charts/argocd-bootstrap"
+  namespace        = kubernetes_namespace_v1.argocd.metadata[0].name
+  create_namespace = false
+  timeout          = 300
+  cleanup_on_fail  = true
+
+  values = [
+    yamlencode({
+      objects = local.argocd_bootstrap_objects
+    }),
+  ]
+
+  depends_on = [
+    helm_release.argocd,
   ]
 }

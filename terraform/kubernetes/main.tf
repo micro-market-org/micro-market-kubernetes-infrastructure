@@ -84,6 +84,23 @@ locals {
     client_key             = local.kubernetes_client_key
     cluster_ca_certificate = local.kubernetes_cluster_ca_certificate
   }
+
+  helm_kubernetes_exec = (
+    local.use_gcp_auth ? {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "gke-gcloud-auth-plugin"
+      args        = []
+      } : local.use_aws_auth ? {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", local.aws_eks_cluster_name, "--region", var.aws_region]
+    } : null
+  )
+
+  helm_kubernetes_config = merge(
+    local.kubernetes_config,
+    local.helm_kubernetes_exec == null ? {} : { exec = local.helm_kubernetes_exec },
+  )
 }
 
 provider "kubernetes" {
@@ -111,5 +128,5 @@ provider "kubernetes" {
 }
 
 provider "helm" {
-  # Helm 3.x inherits connection settings from the kubernetes provider above.
+  kubernetes = local.helm_kubernetes_config
 }
