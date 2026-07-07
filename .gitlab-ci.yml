@@ -26,7 +26,7 @@ variables:
   CLOUD_PROVIDER: ${CLOUD_PROVIDER:-azure}
   TF_ROOT: terraform/kubernetes
 
-.terraform-cache: &terraform-cache
+.terraform-cache:
   cache:
     key: ${CI_COMMIT_REF_SLUG}-${CLOUD_PROVIDER}
     paths:
@@ -34,119 +34,109 @@ variables:
       - .terraform.d/plugin-cache
     policy: pull-push
 
-.configure-environment: &configure-environment
-  - mkdir -p $TF_PLUGIN_CACHE_DIR
-  - WORKSPACE="${ENVIRONMENT:-dev}"
-  - echo "Using workspace: $WORKSPACE"
-  - |
-    # Configure provider-specific variables
-    case "${CLOUD_PROVIDER}" in
-      aws)
-        : "${AWS_ROLE_ARN:?Set AWS_ROLE_ARN to the AWS IAM role trusted by GitLab OIDC}"
-        apk add --no-cache aws-cli jq
-        CREDS=$(aws sts assume-role-with-web-identity \
-          --role-arn "${AWS_ROLE_ARN}" \
-          --role-session-name "gitlab-${CI_PROJECT_ID}-${CI_PIPELINE_ID}" \
-          --web-identity-token "${GITLAB_OIDC_TOKEN}" \
-          --duration-seconds 3600)
-        export AWS_ACCESS_KEY_ID=$(echo "${CREDS}" | jq -r '.Credentials.AccessKeyId')
-        export AWS_SECRET_ACCESS_KEY=$(echo "${CREDS}" | jq -r '.Credentials.SecretAccessKey')
-        export AWS_SESSION_TOKEN=$(echo "${CREDS}" | jq -r '.Credentials.SessionToken')
-        export TF_VAR_aws_region=${AWS_REGION:-eu-central-1}
-        export TF_VAR_cloud_provider="aws"
-        export BACKEND_TYPE="s3"
-        ;;
-      azure)
-        export TF_VAR_client_id=$ARM_CLIENT_ID
-        export TF_VAR_client_secret=$ARM_CLIENT_SECRET
-        export TF_VAR_tenant_id=$ARM_TENANT_ID
-        export TF_VAR_subscription_id=$ARM_SUBSCRIPTION_ID
-        export TF_VAR_cloud_provider="azure"
-        export BACKEND_TYPE="azurerm"
-        ;;
-      gcp)
-        echo "$GCP_SERVICE_ACCOUNT_KEY" > gcp-credentials.json
-        export GOOGLE_APPLICATION_CREDENTIALS="$CI_PROJECT_DIR/gcp-credentials.json"
-        export TF_VAR_gcp_credentials="$CI_PROJECT_DIR/gcp-credentials.json"
-        export TF_VAR_gcp_project=$GCP_PROJECT_ID
-        export TF_VAR_gcp_region=${GCP_REGION:-europe-central2}
-        export TF_VAR_gcp_zone=${GCP_ZONE:-europe-central2-a}
-        export TF_VAR_cloud_provider="gcp"
-        export BACKEND_TYPE="gcs"
-        ;;
-      *)
-        echo "ERROR: Unsupported cloud provider: ${CLOUD_PROVIDER}. Must be one of: aws, azure, gcp"
-        exit 1
-        ;;
-    esac
+.configure-environment:
+  before_script:
+    - mkdir -p $TF_PLUGIN_CACHE_DIR
+    - WORKSPACE="${ENVIRONMENT:-dev}"
+    - echo "Using workspace: $WORKSPACE"
+    - |
+      case "${CLOUD_PROVIDER}" in
+        aws)
+          : "${AWS_ROLE_ARN:?Set AWS_ROLE_ARN to the AWS IAM role trusted by GitLab OIDC}"
+          apk add --no-cache aws-cli jq
+          CREDS=$(aws sts assume-role-with-web-identity \
+            --role-arn "${AWS_ROLE_ARN}" \
+            --role-session-name "gitlab-${CI_PROJECT_ID}-${CI_PIPELINE_ID}" \
+            --web-identity-token "${GITLAB_OIDC_TOKEN}" \
+            --duration-seconds 3600)
+          export AWS_ACCESS_KEY_ID=$(echo "${CREDS}" | jq -r '.Credentials.AccessKeyId')
+          export AWS_SECRET_ACCESS_KEY=$(echo "${CREDS}" | jq -r '.Credentials.SecretAccessKey')
+          export AWS_SESSION_TOKEN=$(echo "${CREDS}" | jq -r '.Credentials.SessionToken')
+          export TF_VAR_aws_region=${AWS_REGION:-eu-central-1}
+          export TF_VAR_cloud_provider="aws"
+          export BACKEND_TYPE="s3"
+          ;;
+        azure)
+          export TF_VAR_client_id=$ARM_CLIENT_ID
+          export TF_VAR_client_secret=$ARM_CLIENT_SECRET
+          export TF_VAR_tenant_id=$ARM_TENANT_ID
+          export TF_VAR_subscription_id=$ARM_SUBSCRIPTION_ID
+          export TF_VAR_cloud_provider="azure"
+          export BACKEND_TYPE="azurerm"
+          ;;
+        gcp)
+          echo "$GCP_SERVICE_ACCOUNT_KEY" > gcp-credentials.json
+          export GOOGLE_APPLICATION_CREDENTIALS="$CI_PROJECT_DIR/gcp-credentials.json"
+          export TF_VAR_gcp_credentials="$CI_PROJECT_DIR/gcp-credentials.json"
+          export TF_VAR_gcp_project=$GCP_PROJECT_ID
+          export TF_VAR_gcp_region=${GCP_REGION:-europe-central2}
+          export TF_VAR_gcp_zone=${GCP_ZONE:-europe-central2-a}
+          export TF_VAR_cloud_provider="gcp"
+          export BACKEND_TYPE="gcs"
+          ;;
+        *)
+          echo "ERROR: Unsupported cloud provider: ${CLOUD_PROVIDER}. Must be one of: aws, azure, gcp"
+          exit 1
+          ;;
+      esac
 
-.initialize-terraform: &initialize-terraform
-  - cd ${TF_ROOT}
-  - echo "Initializing Terraform with ${BACKEND_TYPE} backend..."
-  # Select the cloud-specific backend by copying its override file
-  # (see backends/); credentials come from provider env vars, never
-  # from -backend-config arguments.
-  - cp "backends/${BACKEND_TYPE}.tf" backend_override.tf
-  - |
-    case "${CLOUD_PROVIDER}" in
-      aws)
-        terraform init -reconfigure \
-          -backend-config="backends/s3.hcl" \
-          -backend-config="key=kubernetes/aws/${ENVIRONMENT:-dev}/terraform.tfstate"
-        ;;
-      azure)
-        terraform init -reconfigure \
-          -backend-config="backends/azurerm.hcl"
-        ;;
-      gcp)
-        terraform init -reconfigure \
-          -backend-config="backends/gcs.hcl"
-        ;;
-    esac
-  - |
-    # Setup workspace
-    if ! terraform workspace list | grep -q "$WORKSPACE"; then
-      echo "Creating new workspace: $WORKSPACE"
-      terraform workspace new "$WORKSPACE"
-    else
-      echo "Selecting existing workspace: $WORKSPACE"
-      terraform workspace select "$WORKSPACE"
-    fi
-    echo "Current workspace: $(terraform workspace show)"
+.initialize-terraform:
+  before_script:
+    - cd ${TF_ROOT}
+    - echo "Initializing Terraform with ${BACKEND_TYPE} backend..."
+    - cp "backends/${BACKEND_TYPE}.tf" backend_override.tf
+    - |
+      case "${CLOUD_PROVIDER}" in
+        aws)
+          terraform init -reconfigure \
+            -backend-config="backends/s3.hcl" \
+            -backend-config="key=kubernetes/aws/${ENVIRONMENT:-dev}/terraform.tfstate"
+          ;;
+        azure)
+          terraform init -reconfigure \
+            -backend-config="backends/azurerm.hcl"
+          ;;
+        gcp)
+          terraform init -reconfigure \
+            -backend-config="backends/gcs.hcl"
+          ;;
+      esac
+    - |
+      if ! terraform workspace list | grep -q "$WORKSPACE"; then
+        echo "Creating new workspace: $WORKSPACE"
+        terraform workspace new "$WORKSPACE"
+      else
+        echo "Selecting existing workspace: $WORKSPACE"
+        terraform workspace select "$WORKSPACE"
+      fi
+      echo "Current workspace: $(terraform workspace show)"
 
 validate:
   stage: validate
-  <<: *terraform-cache
+  extends: .terraform-cache
   before_script:
-    - *configure-environment
-    - *initialize-terraform
+    - !reference [.configure-environment, before_script]
+    - !reference [.initialize-terraform, before_script]
   script:
     - echo "Validating Terraform configuration..."
     - terraform validate
     - terraform fmt -check -diff -recursive
     - echo "Terraform validation completed successfully."
 
-# Static IaC security scan of the cluster-bootstrap root, independent of
-# CLOUD_PROVIDER and of validate's terraform init/plugins so a checkov
-# finding never blocks on an unrelated fmt/validate step and vice versa.
-# Accepted lab-scope findings would be documented with reasons in
-# .checkov.yaml / inline #checkov:skip comments - see
-# infrastructure/plans/2026-07-03-checkov-gates.md for the pattern (this root
-# currently has none).
 checkov:
   stage: validate
   image:
     name: bridgecrew/checkov:latest
-    entrypoint: [ "" ]
+    entrypoint: [""]
   script:
     - checkov -d terraform/ --config-file .checkov.yaml --compact --quiet
 
 plan:
   stage: plan
-  <<: *terraform-cache
+  extends: .terraform-cache
   before_script:
-    - *configure-environment
-    - *initialize-terraform
+    - !reference [.configure-environment, before_script]
+    - !reference [.initialize-terraform, before_script]
   script:
     - echo "Planning Terraform infrastructure changes..."
     - terraform plan --var-file=./tfvars_files/${ENVIRONMENT:-dev}.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME" -out=tfplan
@@ -162,11 +152,11 @@ plan:
 
 apply:
   stage: apply
-  <<: *terraform-cache
+  extends: .terraform-cache
   when: manual
   before_script:
-    - *configure-environment
-    - *initialize-terraform
+    - !reference [.configure-environment, before_script]
+    - !reference [.initialize-terraform, before_script]
   script:
     - echo "Applying Terraform infrastructure changes..."
     - terraform apply -auto-approve tfplan
@@ -181,11 +171,11 @@ apply:
 
 destroy:
   stage: destroy
-  <<: *terraform-cache
+  extends: .terraform-cache
   when: manual
   before_script:
-    - *configure-environment
-    - *initialize-terraform
+    - !reference [.configure-environment, before_script]
+    - !reference [.initialize-terraform, before_script]
   script:
     - echo "Planning infrastructure destruction (dry-run)..."
     - terraform plan -destroy --var-file=./tfvars_files/${ENVIRONMENT:-dev}.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME"
