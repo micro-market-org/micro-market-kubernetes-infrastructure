@@ -36,7 +36,7 @@ variables:
   before_script:
     - mkdir -p $TF_PLUGIN_CACHE_DIR
     - WORKSPACE="${ENVIRONMENT:-dev}"
-    - echo "Using workspace: $WORKSPACE"
+    - echo "Using workspace $WORKSPACE"
     - |
       case "${CLOUD_PROVIDER}" in
         aws)
