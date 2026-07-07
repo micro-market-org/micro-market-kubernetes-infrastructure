@@ -82,17 +82,17 @@ variables:
     - |
       case "${CLOUD_PROVIDER}" in
         aws)
-          terraform init -reconfigure \
+          terraform init -reconfigure -upgrade \
             -backend-config="backends/s3.hcl" \
             -backend-config="bucket=${AWS_TF_STATE_BUCKET}" \
             -backend-config="key=kubernetes/aws/${ENVIRONMENT:-dev}/terraform.tfstate"
           ;;
         azure)
-          terraform init -reconfigure \
+          terraform init -reconfigure -upgrade \
             -backend-config="backends/azurerm.hcl"
           ;;
         gcp)
-          terraform init -reconfigure \
+          terraform init -reconfigure -upgrade \
             -backend-config="backends/gcs.hcl"
           ;;
       esac
