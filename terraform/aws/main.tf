@@ -41,14 +41,5 @@ provider "kubernetes" {
 }
 
 provider "helm" {
-  kubernetes {
-    host                   = local.kubernetes_host
-    cluster_ca_certificate = local.kubernetes_cluster_ca_certificate
-
-    exec {
-      api_version = "client.authentication.k8s.io/v1beta1"
-      command     = "aws"
-      args        = ["eks", "get-token", "--cluster-name", local.eks_cluster_name, "--region", var.aws_region]
-    }
-  }
+  # Helm 3.x inherits connection settings from the kubernetes provider above.
 }

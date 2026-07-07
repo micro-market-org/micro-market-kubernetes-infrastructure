@@ -15,7 +15,7 @@ data "terraform_remote_state" "infra" {
   backend = "s3"
   config = {
     bucket = var.remote_state_bucket
-    key    = var.remote_state_key != "" ? var.remote_state_key : "aws/${var.environment}/terraform.tfstate"
+    key    = var.remote_state_key != "" ? var.remote_state_key : "env:/${var.environment}/aws/${var.environment}/terraform.tfstate"
     region = var.remote_state_region
   }
 }

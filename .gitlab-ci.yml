@@ -51,6 +51,8 @@ variables:
           export AWS_SESSION_TOKEN=$(echo "${CREDS}" | jq -r '.Credentials.SessionToken')
           export TF_VAR_aws_region=${AWS_REGION:-eu-central-1}
           export TF_VAR_cloud_provider="aws"
+          export TF_VAR_aws_remote_state_bucket="${AWS_TF_STATE_BUCKET}"
+          export TF_VAR_remote_state_bucket="${AWS_TF_STATE_BUCKET}"
           export BACKEND_TYPE="s3"
           ;;
         azure)
