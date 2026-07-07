@@ -94,6 +94,49 @@ resource "kubernetes_config_map_v1" "keycloak_config" {
   }
 }
 
+resource "kubernetes_manifest" "argocd_appproject_microservices" {
+  manifest = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "AppProject"
+    metadata = {
+      name      = "microservices"
+      namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+    }
+    spec = {
+      description = "Microservices platform — restricts GitOps to known repos and namespaces"
+      sourceRepos = [
+        var.argocd_platform_repo_url,
+        var.argocd_deployment_repo_url,
+      ]
+      destinations = [
+        { server = "https://kubernetes.default.svc", namespace = "argocd" },
+        { server = "https://kubernetes.default.svc", namespace = "cert-manager" },
+        { server = "https://kubernetes.default.svc", namespace = "monitoring" },
+        { server = "https://kubernetes.default.svc", namespace = "postgresql" },
+        { server = "https://kubernetes.default.svc", namespace = "keycloak" },
+        { server = "https://kubernetes.default.svc", namespace = "external-dns" },
+        { server = "https://kubernetes.default.svc", namespace = "microservices" },
+        { server = "https://kubernetes.default.svc", namespace = "micro-market-dev" },
+        { server = "https://kubernetes.default.svc", namespace = "micro-market-staging" },
+        { server = "https://kubernetes.default.svc", namespace = "micro-market-prod" },
+        { server = "https://kubernetes.default.svc", namespace = "kube-system" },
+        { server = "https://kubernetes.default.svc", namespace = "istio-system" },
+        { server = "https://kubernetes.default.svc", namespace = "external-secrets" },
+      ]
+      clusterResourceWhitelist = [
+        { group = "*", kind = "ClusterRole" },
+        { group = "*", kind = "ClusterRoleBinding" },
+        { group = "*", kind = "CustomResourceDefinition" },
+        { group = "*", kind = "Namespace" },
+        { group = "*", kind = "IngressClass" },
+        { group = "*", kind = "ClusterIssuer" },
+      ]
+    }
+  }
+
+  depends_on = [helm_release.argocd]
+}
+
 resource "kubernetes_manifest" "argocd_platform_root_application" {
   manifest = {
     apiVersion = "argoproj.io/v1alpha1"
@@ -205,7 +248,7 @@ resource "kubernetes_manifest" "argocd_microservices_appset" {
           }
         }
         spec = {
-          project = "default"
+          project = "microservices"
           source = {
             repoURL        = var.argocd_deployment_repo_url
             targetRevision = var.argocd_deployment_target_revision

@@ -32,6 +32,13 @@ terraform plan \
   -var cluster_issuer="${CLUSTER_ISSUER}" \
   -out=tfplan
 
-terraform apply tfplan
+echo
+read -rp "Apply the plan above? [y/N] " CONFIRM
+if [[ "${CONFIRM}" != "y" && "${CONFIRM}" != "Y" ]]; then
+  echo "Aborted."
+  rm -f tfplan
+  exit 0
+fi
 
+terraform apply tfplan
 rm -f tfplan

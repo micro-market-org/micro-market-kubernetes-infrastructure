@@ -120,27 +120,6 @@ variable "aws_region" {
   default     = "eu-central-1"
 }
 
-variable "aws_access_key" {
-  type        = string
-  description = "The AWS access key for authentication"
-  sensitive   = true
-  default     = ""
-}
-
-variable "aws_secret_key" {
-  type        = string
-  description = "The AWS secret key for authentication"
-  sensitive   = true
-  default     = ""
-}
-
-variable "aws_session_token" {
-  description = "AWS session token for temporary credentials"
-  type        = string
-  sensitive   = true
-  default     = ""
-}
-
 variable "azure_region" {
   description = "Azure region where resources will be deployed"
   type        = string

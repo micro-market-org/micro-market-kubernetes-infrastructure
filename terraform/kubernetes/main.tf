@@ -47,10 +47,7 @@ provider "google" {
 }
 
 provider "aws" {
-  region     = local.aws_provider_region
-  access_key = local.aws_provider_access_key
-  secret_key = local.aws_provider_secret_key
-  token      = local.aws_provider_token
+  region = local.aws_provider_region
 }
 
 locals {
@@ -64,10 +61,7 @@ locals {
   google_zone        = var.cloud_provider == "gcp" ? var.gcp_zone : null
   google_credentials = var.cloud_provider == "gcp" ? var.gcp_credentials : null
 
-  aws_provider_region     = var.cloud_provider == "aws" ? var.aws_region : null
-  aws_provider_access_key = var.cloud_provider == "aws" ? var.aws_access_key : null
-  aws_provider_secret_key = var.cloud_provider == "aws" ? var.aws_secret_key : null
-  aws_provider_token      = var.cloud_provider == "aws" ? var.aws_session_token : null
+  aws_provider_region = var.cloud_provider == "aws" ? var.aws_region : null
 
   use_gcp_auth         = var.cloud_provider == "gcp"
   use_aws_auth         = var.cloud_provider == "aws"

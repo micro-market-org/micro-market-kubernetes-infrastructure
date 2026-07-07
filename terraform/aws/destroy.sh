@@ -6,7 +6,8 @@ PROJECT_NAMESPACE="${PROJECT_NAMESPACE:-danielgherasim-microservices}"
 AWS_REGION="${AWS_REGION:-eu-central-1}"
 REAL_DOMAIN="${REAL_DOMAIN:-danielgherasim.com}"
 CLUSTER_ISSUER="${CLUSTER_ISSUER:-letsencrypt-cloudflare-dns}"
-STATE_BUCKET="${TF_STATE_BUCKET:-terraform-microservices1691715-state}"
+AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-$(aws sts get-caller-identity --query Account --output text)}"
+STATE_BUCKET="${TF_STATE_BUCKET:-terraform-state-${AWS_ACCOUNT_ID}-${AWS_REGION}}"
 STATE_KEY="${TF_STATE_KEY:-kubernetes/aws/${ENVIRONMENT}/terraform.tfstate}"
 VAR_FILE="./tfvars_files/${ENVIRONMENT}.tfvars"
 
@@ -38,6 +39,14 @@ terraform plan -destroy \
   -var cluster_issuer="${CLUSTER_ISSUER}" \
   -out=tfplan.destroy
 
-terraform apply tfplan.destroy
+echo
+echo "WARNING: this will destroy ALL kubernetes bootstrap resources in environment '${ENVIRONMENT}'."
+read -rp "Type 'yes' to confirm: " CONFIRM
+if [[ "${CONFIRM}" != "yes" ]]; then
+  echo "Aborted."
+  rm -f tfplan.destroy
+  exit 0
+fi
 
+terraform apply tfplan.destroy
 rm -f tfplan.destroy
