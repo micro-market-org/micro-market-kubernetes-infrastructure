@@ -16,7 +16,7 @@ Beyond that, `bootstrap.tf` creates:
 - Three ArgoCD bootstrap custom resources rendered through the ArgoCD Helm chart's `extraObjects`, not through standalone `kubernetes_manifest` resources. This is deliberate: the Terraform Kubernetes provider validates CRD-backed GVKs during planning, so direct `kubernetes_manifest` resources fail on a fresh cluster before ArgoCD installs its CRDs. Helm installs the chart CRDs first and then applies these bootstrap objects in the same release:
   1. **`microservices` AppProject** — restricts the microservice applications to the expected repos, namespaces, and cluster-scoped kinds.
   2. **`platform-root` Application** — points at `platform-gitops`'s `bootstrap/root` path. This is platform-gitops's single entry point; everything else in that repo hangs off this one Application as an app-of-apps.
-  3. **`microservices` ApplicationSet** — fans out the 4 microservice Helm charts from `../deployment` across all 3 environments (see below).
+  3. **`microservices` ApplicationSet** — fans out the 4 microservice Helm charts from `../deployment` into the active Terraform environment only (see below).
 
 `state_migration.tf` contains `removed` blocks for the former direct
 `kubernetes_manifest` addresses with `destroy = false`. Existing states will
@@ -34,17 +34,17 @@ removed after the GitOps split because their live equivalents now belong in
 
 ## The `microservices` ApplicationSet — matrix generator mechanics
 
-This is the most structurally interesting piece of this repo. It uses ArgoCD's **matrix generator**: an inline **list generator** of the 4 apps crossed with an inline **list generator** of the 3 environments —
+This is the most structurally interesting piece of this repo. It uses ArgoCD's **matrix generator**: an inline **list generator** of the 4 apps crossed with an inline **list generator** containing only the active Terraform environment —
 
 ```
 generators:
   - matrix:
       generators:
         - list: { elements: [{app: catalog}, {app: orders}, {app: audit}, {app: micro-market-frontend}] }
-        - list: { elements: [{env: dev}, {env: staging}, {env: prod}] }
+        - list: { elements: [{env: <terraform environment>}] }
 ```
 
-— producing 12 generated `Application` resources (4 × 3), each named `{{app}}-{{env}}` (classic fasttemplate substitution, not `goTemplate`). Each generated Application:
+— producing 4 generated `Application` resources per cluster, each named `{{app}}-{{env}}` (classic fasttemplate substitution, not `goTemplate`). Each generated Application:
 
 - `source.repoURL`/`targetRevision`: the `../deployment` repo (`argocd_deployment_repo_url` var, default `https://gitlab.com/microservices1691715/deployment.git`, `HEAD`).
 - `source.path`: `{{app}}` — i.e. the chart directory (`deployment/catalog`, `deployment/orders`, ...).

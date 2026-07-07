@@ -27,9 +27,7 @@ locals {
           { server = "https://kubernetes.default.svc", namespace = "keycloak" },
           { server = "https://kubernetes.default.svc", namespace = "external-dns" },
           { server = "https://kubernetes.default.svc", namespace = "microservices" },
-          { server = "https://kubernetes.default.svc", namespace = "micro-market-dev" },
-          { server = "https://kubernetes.default.svc", namespace = "micro-market-staging" },
-          { server = "https://kubernetes.default.svc", namespace = "micro-market-prod" },
+          { server = "https://kubernetes.default.svc", namespace = "micro-market-${var.environment}" },
           { server = "https://kubernetes.default.svc", namespace = "kube-system" },
           { server = "https://kubernetes.default.svc", namespace = "istio-system" },
           { server = "https://kubernetes.default.svc", namespace = "external-secrets" },
@@ -141,9 +139,7 @@ locals {
                 {
                   list = {
                     elements = [
-                      { env = "dev" },
-                      { env = "staging" },
-                      { env = "prod" },
+                      { env = var.environment },
                     ]
                   }
                 },
