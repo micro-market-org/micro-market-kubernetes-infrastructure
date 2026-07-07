@@ -6,19 +6,33 @@ PROJECT_NAMESPACE="${PROJECT_NAMESPACE:-danielgherasim-microservices}"
 AWS_REGION="${AWS_REGION:-eu-central-1}"
 REAL_DOMAIN="${REAL_DOMAIN:-danielgherasim.com}"
 CLUSTER_ISSUER="${CLUSTER_ISSUER:-letsencrypt-cloudflare-dns}"
-STATE_KEY="${TF_STATE_KEY:-kubernetes/aws/${ENVIRONMENT}/terraform.tfstate}"
 VAR_FILE="./tfvars_files/${ENVIRONMENT}.tfvars"
+
+# Required — must be set in the caller's environment
+: "${AWS_TF_STATE_BUCKET:?Set AWS_TF_STATE_BUCKET to the S3 bucket that holds Terraform state}"
+: "${GITLAB_TOKEN:?Set GITLAB_TOKEN to a GitLab personal access token with read_repository scope}"
+: "${GITLAB_USERNAME:?Set GITLAB_USERNAME to your GitLab username}"
+
+STATE_KEY="kubernetes/aws/${ENVIRONMENT}/terraform.tfstate"
 
 if [[ ! -f "${VAR_FILE}" ]]; then
   echo "Missing variable file: ${VAR_FILE}" >&2
   exit 1
 fi
 
-# Credentials come from AWS_* environment variables (or an assumed role).
 cp backends/s3.tf backend_override.tf
+
 terraform init -reconfigure \
   -backend-config="backends/s3.hcl" \
+  -backend-config="bucket=${AWS_TF_STATE_BUCKET}" \
   -backend-config="key=${STATE_KEY}"
+
+# Use the same workspace name as CI so state is shared
+if ! terraform workspace list | grep -q "^[* ]*${ENVIRONMENT}$"; then
+  terraform workspace new "${ENVIRONMENT}"
+else
+  terraform workspace select "${ENVIRONMENT}"
+fi
 
 terraform plan \
   -var-file="${VAR_FILE}" \
@@ -28,8 +42,18 @@ terraform plan \
   -var project_name="${PROJECT_NAMESPACE}" \
   -var real_domain="${REAL_DOMAIN}" \
   -var cluster_issuer="${CLUSTER_ISSUER}" \
+  -var aws_remote_state_bucket="${AWS_TF_STATE_BUCKET}" \
+  -var gitlab_token="${GITLAB_TOKEN}" \
+  -var gitlab_username="${GITLAB_USERNAME}" \
   -out=tfplan
 
-terraform apply tfplan
+echo
+read -rp "Apply the plan above? [y/N] " CONFIRM
+if [[ "${CONFIRM}" != "y" && "${CONFIRM}" != "Y" ]]; then
+  echo "Aborted."
+  rm -f tfplan
+  exit 0
+fi
 
+terraform apply tfplan
 rm -f tfplan
