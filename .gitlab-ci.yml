@@ -26,15 +26,13 @@ variables:
   CLOUD_PROVIDER: ${CLOUD_PROVIDER:-azure}
   TF_ROOT: terraform/kubernetes
 
-.terraform-cache:
+.terraform-base:
   cache:
     key: ${CI_COMMIT_REF_SLUG}-${CLOUD_PROVIDER}
     paths:
       - ${TF_ROOT}/.terraform
       - .terraform.d/plugin-cache
     policy: pull-push
-
-.configure-environment:
   before_script:
     - mkdir -p $TF_PLUGIN_CACHE_DIR
     - WORKSPACE="${ENVIRONMENT:-dev}"
@@ -79,9 +77,6 @@ variables:
           exit 1
           ;;
       esac
-
-.initialize-terraform:
-  before_script:
     - cd ${TF_ROOT}
     - echo "Initializing Terraform with ${BACKEND_TYPE} backend..."
     - cp "backends/${BACKEND_TYPE}.tf" backend_override.tf
@@ -113,10 +108,7 @@ variables:
 
 validate:
   stage: validate
-  extends: .terraform-cache
-  before_script:
-    - !reference [.configure-environment, before_script]
-    - !reference [.initialize-terraform, before_script]
+  extends: .terraform-base
   script:
     - echo "Validating Terraform configuration..."
     - terraform validate
@@ -133,10 +125,7 @@ checkov:
 
 plan:
   stage: plan
-  extends: .terraform-cache
-  before_script:
-    - !reference [.configure-environment, before_script]
-    - !reference [.initialize-terraform, before_script]
+  extends: .terraform-base
   script:
     - echo "Planning Terraform infrastructure changes..."
     - terraform plan --var-file=./tfvars_files/${ENVIRONMENT:-dev}.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME" -out=tfplan
@@ -152,11 +141,8 @@ plan:
 
 apply:
   stage: apply
-  extends: .terraform-cache
+  extends: .terraform-base
   when: manual
-  before_script:
-    - !reference [.configure-environment, before_script]
-    - !reference [.initialize-terraform, before_script]
   script:
     - echo "Applying Terraform infrastructure changes..."
     - terraform apply -auto-approve tfplan
@@ -171,11 +157,8 @@ apply:
 
 destroy:
   stage: destroy
-  extends: .terraform-cache
+  extends: .terraform-base
   when: manual
-  before_script:
-    - !reference [.configure-environment, before_script]
-    - !reference [.initialize-terraform, before_script]
   script:
     - echo "Planning infrastructure destruction (dry-run)..."
     - terraform plan -destroy --var-file=./tfvars_files/${ENVIRONMENT:-dev}.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME"
