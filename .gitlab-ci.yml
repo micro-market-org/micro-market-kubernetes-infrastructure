@@ -11,7 +11,7 @@ image:
 default:
   id_tokens:
     GITLAB_OIDC_TOKEN:
-      aud: https://gitlab.com
+      aud: sts.amazonaws.com
 
 stages:
   - validate
