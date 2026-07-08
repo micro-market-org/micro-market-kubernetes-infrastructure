@@ -4,23 +4,29 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 4.30"
+      version = "~> 4.80"
     }
     google = {
-      source  = "hashicorp/google"
+      source = "hashicorp/google"
+      # NOTE (2026-07-08 audit): google provider v7.x is now latest stable upstream, but
+      # it is a breaking major-version jump (stricter schema validation, deprecated/renamed
+      # attributes across resources) — see registry.terraform.io/providers/hashicorp/google/latest/docs/guides/version_7_upgrade.
+      # This root only uses the google provider for authentication (no google_* resources
+      # are defined here), so the blast radius is small, but the jump is left un-applied
+      # pending an explicit decision/test; bump deliberately, not as part of a mechanical pass.
       version = "~> 6.0"
     }
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 6.0"
+      version = "~> 6.53"
     }
     helm = {
       source  = "hashicorp/helm"
-      version = "~> 3.0"
+      version = "~> 3.2"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "~> 3.0"
+      version = "~> 3.2"
     }
   }
 

@@ -2,6 +2,12 @@
 # (.terraform.lock.hcl is intentionally NOT ignored — commit it per HashiCorp guidance)
 **/.terraform/*
 
+# Local persistent agent plans
+/plans/
+
+# Local assistant/tool state
+/.claude/
+
 # Cloud-specific backend override generated at init time (see backends/)
 backend_override.tf
 .terraformrc-empty
