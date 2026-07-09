@@ -2,6 +2,8 @@ environment    = "dev"
 cluster_issuer = "letsencrypt-cloudflare-dns"
 database       = "microservices"
 azure_region   = "westeurope"
+real_domain    = "dev.danielgherasim.com"
+auth_domain    = "auth-dev.danielgherasim.com"
 
 argocd_server_replicas                           = 1
 argocd_server_resources_requests_memory          = "100Mi"

@@ -2,6 +2,8 @@ environment    = "staging"
 cluster_issuer = "letsencrypt-cloudflare-dns"
 database       = "microservices"
 azure_region   = "northeurope"
+real_domain    = "staging.danielgherasim.com"
+auth_domain    = "auth-staging.danielgherasim.com"
 
 argocd_server_replicas                           = 1
 argocd_server_resources_requests_memory          = "150Mi"
