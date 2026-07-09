@@ -12,8 +12,6 @@ load_bootstrap_env_defaults() {
   local old_arm_client_secret="${ARM_CLIENT_SECRET-}"
   local old_arm_tenant_id="${ARM_TENANT_ID-}"
   local old_arm_subscription_id="${ARM_SUBSCRIPTION_ID-}"
-  local old_gitlab_username="${GITLAB_USERNAME-}"
-  local old_gitlab_access_token="${GITLAB_ACCESS_TOKEN-}"
   local old_azure_rg="${AZURE_TF_STATE_RESOURCE_GROUP-}"
   local old_azure_account="${AZURE_TF_STATE_STORAGE_ACCOUNT-}"
   local old_azure_container="${AZURE_TF_STATE_CONTAINER-}"
@@ -31,8 +29,6 @@ load_bootstrap_env_defaults() {
   [[ -n "${old_arm_client_secret}" ]] && ARM_CLIENT_SECRET="${old_arm_client_secret}"
   [[ -n "${old_arm_tenant_id}" ]] && ARM_TENANT_ID="${old_arm_tenant_id}"
   [[ -n "${old_arm_subscription_id}" ]] && ARM_SUBSCRIPTION_ID="${old_arm_subscription_id}"
-  [[ -n "${old_gitlab_username}" ]] && GITLAB_USERNAME="${old_gitlab_username}"
-  [[ -n "${old_gitlab_access_token}" ]] && GITLAB_ACCESS_TOKEN="${old_gitlab_access_token}"
   [[ -n "${old_azure_rg}" ]] && AZURE_TF_STATE_RESOURCE_GROUP="${old_azure_rg}"
   [[ -n "${old_azure_account}" ]] && AZURE_TF_STATE_STORAGE_ACCOUNT="${old_azure_account}"
   [[ -n "${old_azure_container}" ]] && AZURE_TF_STATE_CONTAINER="${old_azure_container}"
@@ -42,7 +38,6 @@ load_bootstrap_env_defaults() {
 
 load_bootstrap_env_defaults
 
-GITLAB_ACCESS_TOKEN="${GITLAB_ACCESS_TOKEN:-${GITLAB_REPO_PAT:-}}"
 AZURE_TF_STATE_RESOURCE_GROUP="${AZURE_TF_STATE_RESOURCE_GROUP:-${AZURE_STATE_RESOURCE_GROUP:-rg-infrastructure}}"
 AZURE_TF_STATE_STORAGE_ACCOUNT="${AZURE_TF_STATE_STORAGE_ACCOUNT:-${AZURE_STATE_STORAGE_ACCOUNT:-}}"
 AZURE_TF_STATE_CONTAINER="${AZURE_TF_STATE_CONTAINER:-${AZURE_STATE_CONTAINER:-tfstate}}"
@@ -61,11 +56,6 @@ export ARM_CLIENT_ID
 export ARM_CLIENT_SECRET
 export ARM_TENANT_ID
 export ARM_SUBSCRIPTION_ID
-
-if [ -z "${GITLAB_ACCESS_TOKEN:-}" ] || [ -z "${GITLAB_USERNAME:-}" ]; then
-  echo "Error: GitLab credentials not set. Set GITLAB_ACCESS_TOKEN and GITLAB_USERNAME." >&2
-  exit 1
-fi
 
 echo "=== [INFO] Deploying to environment: $ENVIRONMENT ==="
 echo "=== [INFO] Project namespace: $PROJECT_NAMESPACE ==="
@@ -100,7 +90,7 @@ echo "=== [INFO] Selecting workspace: $ENVIRONMENT ==="
 terraform workspace select "$ENVIRONMENT" || terraform workspace new "$ENVIRONMENT"
 
 echo "=== [INFO] Creating Terraform plan ==="
-terraform plan --var-file=./tfvars_files/$ENVIRONMENT.tfvars -var project_name="$PROJECT_NAMESPACE" -var gitlab_token="$GITLAB_ACCESS_TOKEN" -var gitlab_username="$GITLAB_USERNAME" -out=tfplan
+terraform plan --var-file=./tfvars_files/$ENVIRONMENT.tfvars -var project_name="$PROJECT_NAMESPACE" -out=tfplan
 
 echo ""
 echo "=== [CONFIRMATION] Do you want to apply these changes? (yes/no) ==="

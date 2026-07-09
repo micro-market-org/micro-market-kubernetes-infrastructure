@@ -153,23 +153,10 @@ variable "kubernetes_cluster_ca_certificate" {
   default     = null
 }
 
-variable "gitlab_token" {
-  description = "GitLab personal access token for ArgoCD"
-  type        = string
-  sensitive   = true
-  default     = ""
-}
-
-variable "gitlab_username" {
-  description = "GitLab username for ArgoCD"
-  type        = string
-  default     = ""
-}
-
 variable "argocd_deployment_repo_url" {
   description = "Git repository URL containing the deployment Helm charts consumed by ArgoCD"
   type        = string
-  default     = "https://gitlab.com/microservices1691715/deployment.git"
+  default     = "https://github.com/devdanielgherasim/micro-market-deployment.git"
 }
 
 variable "argocd_deployment_target_revision" {
@@ -181,7 +168,7 @@ variable "argocd_deployment_target_revision" {
 variable "argocd_platform_repo_url" {
   description = "Git repository URL containing platform add-on GitOps source consumed by ArgoCD"
   type        = string
-  default     = "https://gitlab.com/microservices1691715/platform-gitops.git"
+  default     = "https://github.com/devdanielgherasim/micro-market-platform-gitops.git"
 }
 
 variable "argocd_platform_target_revision" {

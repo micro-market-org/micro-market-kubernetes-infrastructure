@@ -23,10 +23,8 @@ locals {
           { server = "https://kubernetes.default.svc", namespace = "argocd" },
           { server = "https://kubernetes.default.svc", namespace = "cert-manager" },
           { server = "https://kubernetes.default.svc", namespace = "monitoring" },
-          { server = "https://kubernetes.default.svc", namespace = "postgresql" },
           { server = "https://kubernetes.default.svc", namespace = "keycloak" },
           { server = "https://kubernetes.default.svc", namespace = "external-dns" },
-          { server = "https://kubernetes.default.svc", namespace = "microservices" },
           { server = "https://kubernetes.default.svc", namespace = "micro-market-${var.environment}" },
           { server = "https://kubernetes.default.svc", namespace = "kube-system" },
           { server = "https://kubernetes.default.svc", namespace = "istio-system" },
@@ -216,20 +214,6 @@ resource "kubernetes_namespace_v1" "monitoring" {
   }
 }
 
-resource "kubernetes_namespace_v1" "postgresql" {
-  metadata {
-    name = "postgresql"
-    labels = {
-      "app.kubernetes.io/managed-by"       = "terraform-bootstrap"
-      "environment"                        = var.environment
-      "app.kubernetes.io/part-of"          = "postgresql"
-      "pod-security.kubernetes.io/enforce" = "baseline"
-      "pod-security.kubernetes.io/audit"   = "restricted"
-      "pod-security.kubernetes.io/warn"    = "restricted"
-    }
-  }
-}
-
 resource "kubernetes_namespace_v1" "keycloak" {
   metadata {
     name = "keycloak"
@@ -258,9 +242,9 @@ resource "kubernetes_namespace_v1" "external_dns" {
   }
 }
 
-resource "kubernetes_namespace_v1" "microservices" {
+resource "kubernetes_namespace_v1" "micro_market" {
   metadata {
-    name = "microservices"
+    name = "micro-market-${var.environment}"
     labels = {
       "app.kubernetes.io/managed-by"       = "terraform-bootstrap"
       "environment"                        = var.environment
@@ -276,7 +260,7 @@ resource "kubernetes_namespace_v1" "microservices" {
 resource "kubernetes_config_map_v1" "keycloak_config" {
   metadata {
     name      = "keycloak-config"
-    namespace = kubernetes_namespace_v1.microservices.metadata[0].name
+    namespace = kubernetes_namespace_v1.micro_market.metadata[0].name
   }
 
   data = {

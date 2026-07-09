@@ -53,17 +53,11 @@ resource "helm_release" "argocd" {
 
   set = [
     { name = "configs.secret.createSecret", value = "true" },
-    { name = "configs.credentialTemplates.https-creds.username", value = var.gitlab_username },
-    { name = "configs.credentialTemplates.https-creds.url", value = trimsuffix(var.argocd_deployment_repo_url, "/deployment.git") },
-    { name = "configs.credentialTemplates.platform-gitops.username", value = var.gitlab_username },
-    { name = "configs.credentialTemplates.platform-gitops.url", value = trimsuffix(var.argocd_platform_repo_url, "/platform-gitops.git") },
     { name = "redis.secretName", value = "argocd-redis" },
   ]
 
   set_sensitive = [
     { name = "configs.secret.argocdServerAdminPassword", value = local.argocd_admin_password },
-    { name = "configs.credentialTemplates.https-creds.password", value = var.gitlab_token },
-    { name = "configs.credentialTemplates.platform-gitops.password", value = var.gitlab_token },
     { name = "configs.secret.extra.argo-oidc-client-secret", value = local.argocd_oidc_client_secret },
     { name = "redis.password", value = local.argocd_redis_password },
   ]

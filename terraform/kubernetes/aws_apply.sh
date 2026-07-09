@@ -19,8 +19,6 @@ if [[ -f "${ENV_FILE}" ]]; then
 fi
 
 : "${AWS_TF_STATE_BUCKET:?Set AWS_TF_STATE_BUCKET in .env or export it}"
-: "${GITLAB_TOKEN:?Set GITLAB_TOKEN in .env or export it}"
-: "${GITLAB_USERNAME:?Set GITLAB_USERNAME in .env or export it}"
 
 STATE_KEY="kubernetes/aws/${ENVIRONMENT}/terraform.tfstate"
 
@@ -52,8 +50,6 @@ terraform plan \
   -var real_domain="${REAL_DOMAIN}" \
   -var cluster_issuer="${CLUSTER_ISSUER}" \
   -var aws_remote_state_bucket="${AWS_TF_STATE_BUCKET}" \
-  -var gitlab_token="${GITLAB_TOKEN}" \
-  -var gitlab_username="${GITLAB_USERNAME}" \
   -out=tfplan -lock=false
 
 echo
