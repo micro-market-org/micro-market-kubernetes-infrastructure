@@ -34,7 +34,5 @@ kubeconfig.*
 
 # Environment-specific files
 .env
-.env
-!.env
 *.auto.tfvars
 *.tfvars.local
