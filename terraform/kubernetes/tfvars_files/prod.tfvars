@@ -1,7 +1,7 @@
 environment    = "prod"
 cluster_issuer = "letsencrypt-cloudflare-dns"
 database       = "microservices"
-azure_region   = "westeurope"
+azure_region   = "swedencentral"
 
 argocd_server_replicas                           = 1
 argocd_server_resources_requests_memory          = "100Mi"
