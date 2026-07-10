@@ -7,7 +7,7 @@
 # all add-ons managed by ArgoCD from the separate `platform-gitops` repo.
 # A full checkov run against terraform/ here comes back clean with no
 # findings, so there are no skip-check entries to document. This file exists
-# so the `checkov` CI validate job (see .gitlab-ci.yml) has a stable,
+# so the `checkov` CI validate job (see .github/workflows/ci.yml) has a stable,
 # version-controlled config to point at, and so a skip can be added here with
 # a documented reason if a future change introduces a genuine, accepted
 # lab-scope finding - see `infrastructure/.checkov.yaml` in the sibling repo

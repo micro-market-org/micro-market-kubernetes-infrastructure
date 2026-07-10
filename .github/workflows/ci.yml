@@ -1,7 +1,7 @@
 # =============================================================================
 # ci.yml
 # -----------------------------------------------------------------------------
-# GitHub Actions port of .gitlab-ci.yml (4 stages: validate, plan, apply,
+# GitHub Actions port of the retired GitLab pipeline (4 stages: validate, plan, apply,
 # destroy over a single terraform/kubernetes root, cloud selected via
 # TF_VAR_cloud_provider + a backend_override.tf copied in from
 # backends/{s3,azurerm,gcs}.tf).
@@ -16,28 +16,24 @@
 #          until it is). This job only runs on workflow_dispatch (never on
 #          push/pull_request) so it can never fail a normal CI run, and it
 #          WILL fail today if manually dispatched, exactly as expected, at
-#          the `: "${AWS_ROLE_ARN:?...}"`-style guards below. Cloud login is
-#          ported as-is from GitLab: AWS via OIDC assume-role-with-web-
-#          identity (GitHub's OIDC token exchanged for `sts.amazonaws.com`,
-#          same idea as GitLab's id_tokens: block), Azure via static
+#          the `: "${AWS_ROLE_ARN:?...}"`-style guards below. Cloud login:
+#          AWS via OIDC assume-role-with-web-identity (GitHub's OIDC token
+#          exchanged for `sts.amazonaws.com`), Azure via static
 #          ARM_CLIENT_ID/ARM_CLIENT_SECRET/ARM_TENANT_ID/ARM_SUBSCRIPTION_ID
 #          (this repo does not use Azure OIDC, unlike the sibling
-#          `infrastructure` repo - not upgraded here, ported as-is), GCP via
-#          a service-account JSON key. Revisit once Azure infra is live.
+#          `infrastructure` repo - not upgraded here), GCP via a
+#          service-account JSON key. Revisit once Azure infra is live.
 #   * plan / apply / destroy -> same structural-only caveat as validate.
-#          `apply`/`destroy` are GitLab `when: manual` jobs; here they only
-#          run when workflow_dispatch's `action` input selects them. GitLab's
-#          `environment: ... on_stop: destroy` / `action: stop` linkage has
-#          no GitHub Actions Environments equivalent configured yet (no
-#          Environments/protection rules exist on this repo) - `environment:`
-#          below is set for tracking only, follow-up work.
+#          `apply`/`destroy` only run when workflow_dispatch's `action`
+#          input selects them. No GitHub Actions Environments/protection
+#          rules exist on this repo yet - `environment:` below is set for
+#          tracking only, follow-up work.
 #
 # Required secrets/vars once cloud wiring goes live (Phase 5, not this task):
 #   Secrets: AWS_ROLE_ARN, AWS_TF_STATE_BUCKET, ARM_CLIENT_ID,
 #            ARM_CLIENT_SECRET, ARM_TENANT_ID, ARM_SUBSCRIPTION_ID,
-#            GCP_SERVICE_ACCOUNT_KEY, GCP_PROJECT_ID, GITLAB_ACCESS_TOKEN
-#   Variables: AWS_REGION, GCP_REGION, GCP_ZONE, PROJECT_NAMESPACE,
-#              GITLAB_USERNAME
+#            GCP_SERVICE_ACCOUNT_KEY, GCP_PROJECT_ID
+#   Variables: AWS_REGION, GCP_REGION, GCP_ZONE, PROJECT_NAMESPACE
 # =============================================================================
 
 name: Kubernetes Infrastructure CI
@@ -232,9 +228,11 @@ jobs:
           echo "Terraform validation completed successfully."
 
   # ---------------------------------------------------------------------------
-  # Port of the `plan` job. STRUCTURAL ONLY - see header comment. GitLab vars
-  # gitlab_token/gitlab_username kept as-is (ArgoCD git source still points at
-  # GitLab - that cutover is a separate later phase, not this task).
+  # Port of the `plan` job. STRUCTURAL ONLY - see header comment. The former
+  # gitlab_token/gitlab_username -var passthrough was removed: ArgoCD's repo
+  # source has cut over to the public deployment/platform-gitops GitHub
+  # repos (no repo-credential Secret needed) and no Terraform variable of
+  # that name exists in this root anymore.
   # ---------------------------------------------------------------------------
   plan:
     name: Terraform plan (structural port - unverified, no cloud secrets yet)
@@ -259,8 +257,6 @@ jobs:
       GCP_REGION: ${{ vars.GCP_REGION }}
       GCP_ZONE: ${{ vars.GCP_ZONE }}
       PROJECT_NAMESPACE: ${{ vars.PROJECT_NAMESPACE }}
-      GITLAB_ACCESS_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
-      GITLAB_USERNAME: ${{ vars.GITLAB_USERNAME }}
     steps:
       - uses: actions/checkout@v7
 
@@ -345,8 +341,6 @@ jobs:
           terraform plan \
             --var-file="./tfvars_files/${WORKSPACE}.tfvars" \
             -var project_name="${PROJECT_NAMESPACE}" \
-            -var gitlab_token="${GITLAB_ACCESS_TOKEN}" \
-            -var gitlab_username="${GITLAB_USERNAME}" \
             -out=tfplan
           terraform show -json tfplan > plan.json
           echo "Terraform plan completed and saved to tfplan."
@@ -508,8 +502,6 @@ jobs:
       GCP_REGION: ${{ vars.GCP_REGION }}
       GCP_ZONE: ${{ vars.GCP_ZONE }}
       PROJECT_NAMESPACE: ${{ vars.PROJECT_NAMESPACE }}
-      GITLAB_ACCESS_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
-      GITLAB_USERNAME: ${{ vars.GITLAB_USERNAME }}
     steps:
       - uses: actions/checkout@v7
 
@@ -593,13 +585,9 @@ jobs:
           echo "Planning infrastructure destruction (dry-run)..."
           terraform plan -destroy \
             --var-file="./tfvars_files/${WORKSPACE}.tfvars" \
-            -var project_name="${PROJECT_NAMESPACE}" \
-            -var gitlab_token="${GITLAB_ACCESS_TOKEN}" \
-            -var gitlab_username="${GITLAB_USERNAME}"
+            -var project_name="${PROJECT_NAMESPACE}"
           echo "Executing infrastructure destruction..."
           terraform destroy -auto-approve \
             --var-file="./tfvars_files/${WORKSPACE}.tfvars" \
-            -var project_name="${PROJECT_NAMESPACE}" \
-            -var gitlab_token="${GITLAB_ACCESS_TOKEN}" \
-            -var gitlab_username="${GITLAB_USERNAME}"
+            -var project_name="${PROJECT_NAMESPACE}"
           echo "Terraform destroy completed successfully."

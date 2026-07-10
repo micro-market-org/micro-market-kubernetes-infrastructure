@@ -12,7 +12,7 @@ Beyond that, `bootstrap.tf` creates:
 
 - Kubernetes namespaces: `cert-manager`, `monitoring`, `postgresql`, `keycloak`, `external-dns`, and `microservices` (the last one labeled `istio.io/dataplane-mode: ambient` so Istio's ambient mesh picks it up automatically).
 - A `keycloak-config` ConfigMap (just the realm issuer URL — not a secret).
-- `helm_release.argocd` (ArgoCD itself) plus repo-credential secrets so ArgoCD can pull from the private `deployment` and `platform-gitops` GitLab repos.
+- `helm_release.argocd` (ArgoCD itself), configured to pull from the `deployment` and `platform-gitops` GitHub repos (both public, so no repo-credential Secret is needed).
 - Three ArgoCD bootstrap custom resources rendered through the ArgoCD Helm chart's `extraObjects`, not through standalone `kubernetes_manifest` resources. This is deliberate: the Terraform Kubernetes provider validates CRD-backed GVKs during planning, so direct `kubernetes_manifest` resources fail on a fresh cluster before ArgoCD installs its CRDs. Helm installs the chart CRDs first and then applies these bootstrap objects in the same release:
   1. **`microservices` AppProject** — restricts the microservice applications to the expected repos, namespaces, and cluster-scoped kinds.
   2. **`platform-root` Application** — points at `platform-gitops`'s `bootstrap/root` path. This is platform-gitops's single entry point; everything else in that repo hangs off this one Application as an app-of-apps.
@@ -46,7 +46,7 @@ generators:
 
 — producing 4 generated `Application` resources per cluster, each named `{{app}}-{{env}}` (classic fasttemplate substitution, not `goTemplate`). Each generated Application:
 
-- `source.repoURL`/`targetRevision`: the `../deployment` repo (`argocd_deployment_repo_url` var, default `https://gitlab.com/microservices1691715/deployment.git`, `HEAD`).
+- `source.repoURL`/`targetRevision`: the `../deployment` repo (`argocd_deployment_repo_url` var, default `https://github.com/devdanielgherasim/micro-market-deployment.git`, `HEAD`).
 - `source.path`: `{{app}}` — i.e. the chart directory (`deployment/catalog`, `deployment/orders`, ...).
 - `source.helm.valueFiles`: `../environments/{{env}}/{{app}}-values.yaml` — pointing at `deployment`'s top-level `environments/<env>/<app>-values.yaml` overlay (see `../deployment`'s README for that layout).
 - `destination.namespace`: `micro-market-{{env}}`.
@@ -56,18 +56,34 @@ Image repository/tag are deliberately **not** injected as ApplicationSet Helm pa
 
 The `platform-root` Application is part of the Helm release `extraObjects` list and injects a large `global`/`secretStores` `valuesObject` (cloud provider, environment, domain, auth domain, ACME email, cluster issuer, and per-cloud External Secrets Operator wiring — role ARN for AWS, Key Vault URL/client ID for Azure, service account for GCP) into `platform-gitops`'s `bootstrap/root` chart.
 
-## CI pipeline (`.gitlab-ci.yml`)
+## CI pipeline (`.github/workflows/ci.yml`)
 
-Same shape and cloud-parameterization pattern as `../infrastructure`: stages `validate → plan → apply (manual) → destroy (manual)`, backend selection via `backends/{azurerm,gcs,s3}.{tf,hcl}` copied to a gitignored `backend_override.tf` and `terraform init -reconfigure -backend-config=...`. A `checkov` job runs in `validate`, independent of the `validate` (fmt+validate) job, scanning `terraform/`.
+CI runs on GitHub Actions (migrated from GitLab CI, see
+`Sources/plans/2026-07-08-gitlab-to-github-migration.md`). Same shape and
+cloud-parameterization pattern as `../infrastructure`: jobs `validate` /
+`plan` / `apply` / `destroy` (the latter three `workflow_dispatch`-only,
+gated by the `action` input), backend selection via
+`backends/{azurerm,gcs,s3}.{tf,hcl}` copied to a gitignored
+`backend_override.tf` and `terraform init -reconfigure -backend-config=...`.
+A `checkov` job runs independently of `validate`, scanning `terraform/`.
+`security-scan-gate` (the shared reusable workflow) replaces GitLab's
+Secret-Detection template with gitleaks.
 
-For AWS, CI uses GitLab OIDC rather than static AWS keys: `AWS_ROLE_ARN` points
-at an IAM role trusted by the `kubernetes-infrastructure` protected branch,
-GitLab provides `GITLAB_OIDC_TOKEN`, and the pipeline exchanges it for one-hour
-STS credentials before running Terraform and `aws eks get-token`.
+For AWS, CI uses GitHub's native OIDC rather than static AWS keys: `AWS_ROLE_ARN`
+points at an IAM role trusted by GitHub's OIDC issuer
+(`token.actions.githubusercontent.com`); the workflow exchanges GitHub's
+runner-issued ID token for one-hour STS credentials before running Terraform
+and `aws eks get-token`. This job path is still marked structural/unverified
+in the workflow's own header comment — no cloud secrets are configured on
+this repo yet.
 
 ## Destroy order and ArgoCD cascade cleanup
 
-Before running a Kubernetes-layer destroy, run `terraform/kubernetes/destroy_argocd_apps.sh` against the target cluster. The helper deletes the `microservices` ApplicationSet, its 12 generated microservice Applications, and `platform-root` with ArgoCD foreground finalizers so ArgoCD prunes managed resources before Terraform removes the bootstrap layer. This implements the pre-destroy cascade-delete step called out in the root runbook.
+`terraform/kubernetes/destroy_argocd_apps.sh` deletes the `microservices` ApplicationSet, its 12 generated microservice Applications, `platform-root`, and (via `platform-root`'s own finalizer cascade) the `platform-<addon>` Applications and `platform` AppProject, all with ArgoCD foreground finalizers, so ArgoCD prunes every managed resource before Terraform removes the bootstrap layer. This implements the pre-destroy cascade-delete step called out in the root runbook.
+
+`azure_destroy.sh` / `aws_destroy.sh` / `gcp_destroy.sh` now call this script automatically (after fetching cluster credentials, before the Terraform destroy apply) — no manual step needed for those paths. It fails the destroy script by default if the cascade doesn't complete within `WAIT_TIMEOUT` (default `300s`); set `ARGOCD_CASCADE_SKIP=true` to explicitly bypass it (not recommended — the `argocd` namespace can then get stuck `Terminating` and ExternalDNS-managed records can orphan, see ADR-10).
+
+The GitHub Actions `destroy` job (`.github/workflows/ci.yml`) does **not** yet have this wired in — its runner has no `kubectl`/`az`/`gcloud` step configured for it. Until that's added, destroys run through that CI job still need `destroy_argocd_apps.sh` run manually against the target cluster first.
 
 ## `.checkov.yaml` — much shorter than `infrastructure`'s
 
