@@ -1,6 +1,5 @@
 environment    = "prod"
 cluster_issuer = "letsencrypt-cloudflare-dns"
-database       = "microservices"
 azure_region   = "swedencentral"
 real_domain    = "danielgherasim.com"
 auth_domain    = "auth.danielgherasim.com"

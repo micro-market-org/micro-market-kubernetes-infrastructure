@@ -1,7 +1,6 @@
 environment    = "dev"
 cluster_issuer = "letsencrypt-cloudflare-dns"
-database       = "microservices"
-azure_region   = "westeurope"
+azure_region   = "germanywestcentral"
 real_domain    = "dev.danielgherasim.com"
 auth_domain    = "auth-dev.danielgherasim.com"
 

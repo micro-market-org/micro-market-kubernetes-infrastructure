@@ -1,0 +1,115 @@
+name: Terraform cloud backend setup
+description: >-
+  Authenticates to the selected cloud with GitHub-native OIDC where supported,
+  sets Terraform provider variables, and computes backend args/workspace for
+  the kubernetes-infrastructure Terraform root.
+inputs:
+  cloud_provider:
+    description: One of aws, azure, gcp
+    required: true
+  environment:
+    description: Terraform workspace / environment name
+    required: true
+outputs:
+  backend_type:
+    description: Backend override type to copy from terraform/kubernetes/backends
+    value: ${{ steps.compute.outputs.backend_type }}
+  backend_args:
+    description: Space-separated backend config args for terraform init
+    value: ${{ steps.compute.outputs.backend_args }}
+  workspace:
+    description: Resolved Terraform workspace name
+    value: ${{ steps.compute.outputs.workspace }}
+runs:
+  using: composite
+  steps:
+    - name: Assume AWS role via GitHub OIDC
+      if: inputs.cloud_provider == 'aws'
+      uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4
+      with:
+        role-to-assume: ${{ env.AWS_ROLE_ARN }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Authenticate to GCP via Workload Identity Federation
+      id: gcp-auth
+      if: inputs.cloud_provider == 'gcp'
+      uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+      with:
+        workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ env.GCP_SERVICE_ACCOUNT_EMAIL }}
+        create_credentials_file: true
+        export_environment_variables: true
+
+    # Azure needs no azure/login step: with ARM_USE_OIDC=true, ARM_CLIENT_ID,
+    # ARM_TENANT_ID, ARM_SUBSCRIPTION_ID, and id-token: write on the calling
+    # job, the azurerm provider performs the federated token exchange.
+
+    - name: Compute backend args and Terraform variables
+      id: compute
+      shell: bash
+      env:
+        CLOUD_PROVIDER: ${{ inputs.cloud_provider }}
+        ENVIRONMENT: ${{ inputs.environment }}
+      run: |
+        set -eu
+        WORKSPACE="${ENVIRONMENT:-dev}"
+
+        case "${CLOUD_PROVIDER}" in
+          aws)
+            : "${AWS_ROLE_ARN:?Set AWS_ROLE_ARN secret}"
+            : "${AWS_REGION:?Set AWS_REGION repo variable}"
+            : "${AWS_TF_STATE_BUCKET:?Set AWS_TF_STATE_BUCKET secret or repo variable}"
+            BACKEND_TYPE="s3"
+            BACKEND_ARGS="-backend-config=backends/s3.hcl -backend-config=bucket=${AWS_TF_STATE_BUCKET} -backend-config=key=kubernetes/aws/${WORKSPACE}/terraform.tfstate"
+            echo "TF_VAR_cloud_provider=aws" >> "${GITHUB_ENV}"
+            echo "TF_VAR_aws_region=${AWS_REGION}" >> "${GITHUB_ENV}"
+            echo "TF_VAR_aws_remote_state_bucket=${AWS_TF_STATE_BUCKET}" >> "${GITHUB_ENV}"
+            echo "TF_VAR_remote_state_bucket=${AWS_TF_STATE_BUCKET}" >> "${GITHUB_ENV}"
+            ;;
+          azure)
+            : "${ARM_CLIENT_ID:?Set ARM_CLIENT_ID secret for Azure federated identity}"
+            : "${ARM_TENANT_ID:?Set ARM_TENANT_ID secret}"
+            : "${ARM_SUBSCRIPTION_ID:?Set ARM_SUBSCRIPTION_ID secret}"
+            RESOURCE_GROUP="${AZURE_TF_STATE_RESOURCE_GROUP:-rg-infrastructure}"
+            STORAGE_ACCOUNT="${AZURE_TF_STATE_STORAGE_ACCOUNT:-}"
+            CONTAINER="${AZURE_TF_STATE_CONTAINER:-tfstate}"
+            if [[ -z "${STORAGE_ACCOUNT}" || "${STORAGE_ACCOUNT}" == "terraformmicrostate" ]]; then
+              SUB_PART="$(printf '%s' "${ARM_SUBSCRIPTION_ID}" | tr -d '-' | tr '[:upper:]' '[:lower:]' | cut -c1-12)"
+              ENV_PART="$(printf '%s' "${WORKSPACE}" | tr -cd '[:alnum:]' | tr '[:upper:]' '[:lower:]' | cut -c1-5)"
+              STORAGE_ACCOUNT="tfstate${SUB_PART}${ENV_PART}"
+            fi
+            BACKEND_TYPE="azurerm"
+            BACKEND_ARGS="-backend-config=resource_group_name=${RESOURCE_GROUP} -backend-config=storage_account_name=${STORAGE_ACCOUNT} -backend-config=container_name=${CONTAINER} -backend-config=key=kubernetes.tfstate"
+            echo "ARM_USE_OIDC=true" >> "${GITHUB_ENV}"
+            echo "TF_VAR_cloud_provider=azure" >> "${GITHUB_ENV}"
+            echo "TF_VAR_client_id=${ARM_CLIENT_ID}" >> "${GITHUB_ENV}"
+            echo "TF_VAR_tenant_id=${ARM_TENANT_ID}" >> "${GITHUB_ENV}"
+            echo "TF_VAR_subscription_id=${ARM_SUBSCRIPTION_ID}" >> "${GITHUB_ENV}"
+            echo "TF_VAR_azure_remote_state_resource_group=${RESOURCE_GROUP}" >> "${GITHUB_ENV}"
+            echo "TF_VAR_azure_remote_state_storage_account=${STORAGE_ACCOUNT}" >> "${GITHUB_ENV}"
+            echo "TF_VAR_azure_remote_state_container=${CONTAINER}" >> "${GITHUB_ENV}"
+            ;;
+          gcp)
+            : "${GCP_PROJECT_ID:?Set GCP_PROJECT_ID secret}"
+            : "${GCP_WORKLOAD_IDENTITY_PROVIDER:?Set GCP_WORKLOAD_IDENTITY_PROVIDER secret}"
+            : "${GCP_SERVICE_ACCOUNT_EMAIL:?Set GCP_SERVICE_ACCOUNT_EMAIL secret}"
+            BUCKET="${GCP_TF_STATE_BUCKET:-terraformmicroservicesstate}"
+            PREFIX="${GCP_KUBERNETES_TF_STATE_PREFIX:-kubernetes/state}"
+            BACKEND_TYPE="gcs"
+            BACKEND_ARGS="-backend-config=backends/gcs.hcl -backend-config=bucket=${BUCKET} -backend-config=prefix=${PREFIX}"
+            echo "TF_VAR_cloud_provider=gcp" >> "${GITHUB_ENV}"
+            echo "TF_VAR_gcp_project=${GCP_PROJECT_ID}" >> "${GITHUB_ENV}"
+            echo "TF_VAR_gcp_region=${GCP_REGION:-europe-central2}" >> "${GITHUB_ENV}"
+            echo "TF_VAR_gcp_zone=${GCP_ZONE:-europe-central2-a}" >> "${GITHUB_ENV}"
+            echo "TF_VAR_gcp_credentials=${GOOGLE_APPLICATION_CREDENTIALS}" >> "${GITHUB_ENV}"
+            ;;
+          *)
+            echo "Unsupported cloud provider: ${CLOUD_PROVIDER}. Must be one of: aws, azure, gcp" >&2
+            exit 1
+            ;;
+        esac
+
+        echo "TF_VAR_environment=${WORKSPACE}" >> "${GITHUB_ENV}"
+        echo "backend_type=${BACKEND_TYPE}" >> "${GITHUB_OUTPUT}"
+        echo "backend_args=${BACKEND_ARGS}" >> "${GITHUB_OUTPUT}"
+        echo "workspace=${WORKSPACE}" >> "${GITHUB_OUTPUT}"

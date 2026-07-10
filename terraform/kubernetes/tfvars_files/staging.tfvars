@@ -1,6 +1,5 @@
 environment    = "staging"
 cluster_issuer = "letsencrypt-cloudflare-dns"
-database       = "microservices"
 azure_region   = "northeurope"
 real_domain    = "staging.danielgherasim.com"
 auth_domain    = "auth-staging.danielgherasim.com"

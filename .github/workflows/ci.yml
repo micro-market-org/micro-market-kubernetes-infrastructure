@@ -1,48 +1,38 @@
 # =============================================================================
 # ci.yml
 # -----------------------------------------------------------------------------
-# GitHub Actions port of the retired GitLab pipeline (4 stages: validate, plan, apply,
-# destroy over a single terraform/kubernetes root, cloud selected via
-# TF_VAR_cloud_provider + a backend_override.tf copied in from
-# backends/{s3,azurerm,gcs}.tf).
+# GitHub Actions pipeline for the Terraform bootstrap root in terraform/kubernetes.
 #
-#   * secret_detection (GitLab managed Secret-Detection template)
-#       -> security-scan-gate (reusable workflow, same as platform-gitops and
-#          deployment already migrated), gitleaks covers secret detection.
-#   * checkov   -> checkov job. No cloud dependency, ported 1:1, runs for real.
-#   * validate  -> validate job. STRUCTURAL PORT ONLY. No cloud secrets are
-#          configured on this GitHub repo yet (Azure infra isn't deployed;
-#          the user is deliberately holding off on wiring cloud credentials
-#          until it is). This job only runs on workflow_dispatch (never on
-#          push/pull_request) so it can never fail a normal CI run, and it
-#          WILL fail today if manually dispatched, exactly as expected, at
-#          the `: "${AWS_ROLE_ARN:?...}"`-style guards below. Cloud login:
-#          AWS via OIDC assume-role-with-web-identity (GitHub's OIDC token
-#          exchanged for `sts.amazonaws.com`), Azure via static
-#          ARM_CLIENT_ID/ARM_CLIENT_SECRET/ARM_TENANT_ID/ARM_SUBSCRIPTION_ID
-#          (this repo does not use Azure OIDC, unlike the sibling
-#          `infrastructure` repo - not upgraded here), GCP via a
-#          service-account JSON key. Revisit once Azure infra is live.
-#   * plan / apply / destroy -> same structural-only caveat as validate.
-#          `apply`/`destroy` only run when workflow_dispatch's `action`
-#          input selects them. No GitHub Actions Environments/protection
-#          rules exist on this repo yet - `environment:` below is set for
-#          tracking only, follow-up work.
+# Security and static Terraform checks run on every push/PR without cloud
+# credentials. Remote-backend validate/plan/apply/destroy are manual
+# workflow_dispatch operations because they require cloud OIDC trust and target a
+# selected cloud/environment.
 #
-# Required secrets/vars once cloud wiring goes live (Phase 5, not this task):
-#   Secrets: AWS_ROLE_ARN, AWS_TF_STATE_BUCKET, ARM_CLIENT_ID,
-#            ARM_CLIENT_SECRET, ARM_TENANT_ID, ARM_SUBSCRIPTION_ID,
-#            GCP_SERVICE_ACCOUNT_KEY, GCP_PROJECT_ID
-#   Variables: AWS_REGION, GCP_REGION, GCP_ZONE, PROJECT_NAMESPACE
+# Required secrets/vars once cloud wiring goes live:
+#   Secrets: AWS_ROLE_ARN, ARM_CLIENT_ID, ARM_TENANT_ID, ARM_SUBSCRIPTION_ID,
+#            GCP_PROJECT_ID, GCP_WORKLOAD_IDENTITY_PROVIDER,
+#            GCP_SERVICE_ACCOUNT_EMAIL
+#   Variables or secrets: AWS_TF_STATE_BUCKET, AWS_REGION, GCP_TF_STATE_BUCKET,
+#            GCP_REGION, GCP_ZONE, PROJECT_NAMESPACE
 # =============================================================================
 
 name: Kubernetes Infrastructure CI
 
 on:
   pull_request:
+    paths:
+      - terraform/**
+      - .checkov.yaml
+      - .github/workflows/ci.yml
+      - .github/actions/terraform-cloud-setup/**
   push:
     branches:
       - main
+    paths:
+      - terraform/**
+      - .checkov.yaml
+      - .github/workflows/ci.yml
+      - .github/actions/terraform-cloud-setup/**
   workflow_dispatch:
     inputs:
       cloud_provider:
@@ -64,7 +54,7 @@ on:
           - staging
           - prod
       action:
-        description: What to do after validate+plan (apply/destroy require explicitly selecting them; plan always runs)
+        description: What to do after validate+plan
         required: true
         type: choice
         default: plan
@@ -72,37 +62,45 @@ on:
           - plan
           - apply
           - destroy
+      confirm_destroy:
+        description: Required for destroy. Type destroy-<cloud>-<environment>, for example destroy-aws-dev.
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && format('{0}-{1}', inputs.cloud_provider, inputs.environment_name) || github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
-  security-events: write
-  actions: read
-  pull-requests: read
 
 env:
   TF_ROOT: terraform/kubernetes
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TERRAFORM_VERSION: "1.12.0"
+  PROJECT_NAMESPACE: ${{ vars.PROJECT_NAMESPACE || 'danielgherasim-microservices' }}
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # GitHub replacement for `include: Security/Secret-Detection.gitlab-ci.yml`.
-  # ---------------------------------------------------------------------------
   security-scan-gate:
     name: Security scan gate
-    uses: devdanielgherasim/micro-market-utilities/.github/workflows/security-scan-gate.yml@main
+    # Pinned from main on 2026-07-10.
+    uses: devdanielgherasim/micro-market-utilities/.github/workflows/security-scan-gate.yml@30fc11173bdcd8dc9d6f0291c00633005a75f2df
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+      security-events: write
     with:
       codeql-languages: actions
 
-  # ---------------------------------------------------------------------------
-  # 1:1 port of the `checkov` job. No cloud dependency - works today.
-  # ---------------------------------------------------------------------------
   checkov:
     name: Checkov
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Scan Terraform with Checkov
         run: |
@@ -110,19 +108,39 @@ jobs:
           docker run --rm \
             -v "${PWD}:/work" \
             -w /work \
-            bridgecrew/checkov:latest \
+            bridgecrew/checkov:3.3.7 \
             -d terraform/ \
             --config-file .checkov.yaml \
             --compact \
             --quiet
 
-  # ---------------------------------------------------------------------------
-  # Port of the `validate` job (cloud login + `terraform init` against the
-  # real backend + `terraform validate` + `terraform fmt -check`).
-  # STRUCTURAL ONLY - see header comment. Only runs on workflow_dispatch.
-  # ---------------------------------------------------------------------------
+  terraform-validate-static:
+    name: Terraform validate (static)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform init without backend
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform validate
+
+      - name: Terraform fmt check
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform fmt -check -diff -recursive
+
   validate:
-    name: Terraform validate (structural port - unverified, no cloud secrets yet)
+    name: Terraform validate (remote backend)
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch'
     permissions:
@@ -132,110 +150,60 @@ jobs:
       CLOUD_PROVIDER: ${{ inputs.cloud_provider }}
       ENVIRONMENT: ${{ inputs.environment_name }}
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-      AWS_TF_STATE_BUCKET: ${{ secrets.AWS_TF_STATE_BUCKET }}
-      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_TF_STATE_BUCKET: ${{ secrets.AWS_TF_STATE_BUCKET || vars.AWS_TF_STATE_BUCKET }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'eu-central-1' }}
       ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
       ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-      GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+      AZURE_TF_STATE_RESOURCE_GROUP: ${{ vars.AZURE_TF_STATE_RESOURCE_GROUP }}
+      AZURE_TF_STATE_STORAGE_ACCOUNT: ${{ vars.AZURE_TF_STATE_STORAGE_ACCOUNT }}
+      AZURE_TF_STATE_CONTAINER: ${{ vars.AZURE_TF_STATE_CONTAINER }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.GCP_REGION }}
-      GCP_ZONE: ${{ vars.GCP_ZONE }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      GCP_SERVICE_ACCOUNT_EMAIL: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+      GCP_TF_STATE_BUCKET: ${{ vars.GCP_TF_STATE_BUCKET }}
+      GCP_REGION: ${{ vars.GCP_REGION || 'europe-central2' }}
+      GCP_ZONE: ${{ vars.GCP_ZONE || 'europe-central2-a' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
-      - uses: hashicorp/setup-terraform@v4
+      - name: Configure cloud provider
+        id: cloud
+        uses: ./.github/actions/terraform-cloud-setup
+        with:
+          cloud_provider: ${{ env.CLOUD_PROVIDER }}
+          environment: ${{ env.ENVIRONMENT }}
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
-      - name: Cloud login + terraform init + validate + fmt (unverified until cloud credentials are wired up)
+      - name: Terraform init
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          cp "backends/${{ steps.cloud.outputs.backend_type }}.tf" backend_override.tf
+          terraform init -reconfigure -upgrade ${{ steps.cloud.outputs.backend_args }}
+
+      - name: Terraform workspace select
+        working-directory: ${{ env.TF_ROOT }}
+        env:
+          WORKSPACE: ${{ steps.cloud.outputs.workspace }}
         run: |
           set -eu
-          : "${CLOUD_PROVIDER:?workflow_dispatch input cloud_provider is required}"
-          WORKSPACE="${ENVIRONMENT:-dev}"
-          echo "Using workspace ${WORKSPACE}"
-          case "${CLOUD_PROVIDER}" in
-            aws)
-              : "${AWS_ROLE_ARN:?Set the AWS_ROLE_ARN secret to the IAM role trusted for GitHub OIDC federation}"
-              GH_OIDC_TOKEN=$(curl -sSL -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-                "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" | jq -r '.value')
-              CREDS=$(aws sts assume-role-with-web-identity \
-                --role-arn "${AWS_ROLE_ARN}" \
-                --role-session-name "gha-${GITHUB_RUN_ID}" \
-                --web-identity-token "${GH_OIDC_TOKEN}" \
-                --duration-seconds 3600)
-              AWS_ACCESS_KEY_ID=$(echo "${CREDS}" | jq -r '.Credentials.AccessKeyId')
-              AWS_SECRET_ACCESS_KEY=$(echo "${CREDS}" | jq -r '.Credentials.SecretAccessKey')
-              AWS_SESSION_TOKEN=$(echo "${CREDS}" | jq -r '.Credentials.SessionToken')
-              export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-              export TF_VAR_aws_region="${AWS_REGION:-eu-central-1}"
-              export TF_VAR_cloud_provider="aws"
-              export TF_VAR_aws_remote_state_bucket="${AWS_TF_STATE_BUCKET}"
-              export TF_VAR_remote_state_bucket="${AWS_TF_STATE_BUCKET}"
-              BACKEND_TYPE="s3"
-              ;;
-            azure)
-              export TF_VAR_client_id="${ARM_CLIENT_ID}"
-              export TF_VAR_client_secret="${ARM_CLIENT_SECRET}"
-              export TF_VAR_tenant_id="${ARM_TENANT_ID}"
-              export TF_VAR_subscription_id="${ARM_SUBSCRIPTION_ID}"
-              export TF_VAR_cloud_provider="azure"
-              BACKEND_TYPE="azurerm"
-              ;;
-            gcp)
-              echo "${GCP_SERVICE_ACCOUNT_KEY}" > gcp-credentials.json
-              export GOOGLE_APPLICATION_CREDENTIALS="${GITHUB_WORKSPACE}/gcp-credentials.json"
-              export TF_VAR_gcp_credentials="${GOOGLE_APPLICATION_CREDENTIALS}"
-              export TF_VAR_gcp_project="${GCP_PROJECT_ID}"
-              export TF_VAR_gcp_region="${GCP_REGION:-europe-central2}"
-              export TF_VAR_gcp_zone="${GCP_ZONE:-europe-central2-a}"
-              export TF_VAR_cloud_provider="gcp"
-              BACKEND_TYPE="gcs"
-              ;;
-            *)
-              echo "ERROR: Unsupported cloud provider: ${CLOUD_PROVIDER}. Must be one of: aws, azure, gcp" >&2
-              exit 1
-              ;;
-          esac
-          cd "${TF_ROOT}"
-          echo "Initializing Terraform with ${BACKEND_TYPE} backend..."
-          cp "backends/${BACKEND_TYPE}.tf" backend_override.tf
-          case "${CLOUD_PROVIDER}" in
-            aws)
-              terraform init -reconfigure -upgrade \
-                -backend-config="backends/s3.hcl" \
-                -backend-config="bucket=${AWS_TF_STATE_BUCKET}" \
-                -backend-config="key=kubernetes/aws/${WORKSPACE}/terraform.tfstate"
-              ;;
-            azure)
-              terraform init -reconfigure -upgrade -backend-config="backends/azurerm.hcl"
-              ;;
-            gcp)
-              terraform init -reconfigure -upgrade -backend-config="backends/gcs.hcl"
-              ;;
-          esac
-          if terraform workspace list | grep -q "${WORKSPACE}"; then
-            terraform workspace select "${WORKSPACE}"
-          else
-            terraform workspace new "${WORKSPACE}"
-          fi
+          terraform workspace select "${WORKSPACE}" 2>/dev/null || terraform workspace new "${WORKSPACE}"
           echo "Current workspace: $(terraform workspace show)"
-          echo "Validating Terraform configuration..."
-          terraform validate
-          terraform fmt -check -diff -recursive
-          echo "Terraform validation completed successfully."
 
-  # ---------------------------------------------------------------------------
-  # Port of the `plan` job. STRUCTURAL ONLY - see header comment. The former
-  # gitlab_token/gitlab_username -var passthrough was removed: ArgoCD's repo
-  # source has cut over to the public deployment/platform-gitops GitHub
-  # repos (no repo-credential Secret needed) and no Terraform variable of
-  # that name exists in this root anymore.
-  # ---------------------------------------------------------------------------
+      - name: Terraform validate
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform validate
+
+      - name: Terraform fmt check
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform fmt -check -diff -recursive
+
   plan:
-    name: Terraform plan (structural port - unverified, no cloud secrets yet)
+    name: Terraform plan
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch'
     needs: validate
@@ -246,106 +214,61 @@ jobs:
       CLOUD_PROVIDER: ${{ inputs.cloud_provider }}
       ENVIRONMENT: ${{ inputs.environment_name }}
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-      AWS_TF_STATE_BUCKET: ${{ secrets.AWS_TF_STATE_BUCKET }}
-      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_TF_STATE_BUCKET: ${{ secrets.AWS_TF_STATE_BUCKET || vars.AWS_TF_STATE_BUCKET }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'eu-central-1' }}
       ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
       ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-      GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+      AZURE_TF_STATE_RESOURCE_GROUP: ${{ vars.AZURE_TF_STATE_RESOURCE_GROUP }}
+      AZURE_TF_STATE_STORAGE_ACCOUNT: ${{ vars.AZURE_TF_STATE_STORAGE_ACCOUNT }}
+      AZURE_TF_STATE_CONTAINER: ${{ vars.AZURE_TF_STATE_CONTAINER }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.GCP_REGION }}
-      GCP_ZONE: ${{ vars.GCP_ZONE }}
-      PROJECT_NAMESPACE: ${{ vars.PROJECT_NAMESPACE }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      GCP_SERVICE_ACCOUNT_EMAIL: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+      GCP_TF_STATE_BUCKET: ${{ vars.GCP_TF_STATE_BUCKET }}
+      GCP_REGION: ${{ vars.GCP_REGION || 'europe-central2' }}
+      GCP_ZONE: ${{ vars.GCP_ZONE || 'europe-central2-a' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
-      - uses: hashicorp/setup-terraform@v4
+      - name: Configure cloud provider
+        id: cloud
+        uses: ./.github/actions/terraform-cloud-setup
+        with:
+          cloud_provider: ${{ env.CLOUD_PROVIDER }}
+          environment: ${{ env.ENVIRONMENT }}
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
-      - name: Cloud login + terraform init + plan (unverified until cloud credentials are wired up)
+      - name: Terraform init
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          cp "backends/${{ steps.cloud.outputs.backend_type }}.tf" backend_override.tf
+          terraform init -reconfigure -upgrade ${{ steps.cloud.outputs.backend_args }}
+
+      - name: Terraform workspace select
+        working-directory: ${{ env.TF_ROOT }}
+        env:
+          WORKSPACE: ${{ steps.cloud.outputs.workspace }}
         run: |
           set -eu
-          : "${CLOUD_PROVIDER:?workflow_dispatch input cloud_provider is required}"
-          WORKSPACE="${ENVIRONMENT:-dev}"
-          echo "Using workspace ${WORKSPACE}"
-          case "${CLOUD_PROVIDER}" in
-            aws)
-              : "${AWS_ROLE_ARN:?Set the AWS_ROLE_ARN secret to the IAM role trusted for GitHub OIDC federation}"
-              GH_OIDC_TOKEN=$(curl -sSL -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-                "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" | jq -r '.value')
-              CREDS=$(aws sts assume-role-with-web-identity \
-                --role-arn "${AWS_ROLE_ARN}" \
-                --role-session-name "gha-${GITHUB_RUN_ID}" \
-                --web-identity-token "${GH_OIDC_TOKEN}" \
-                --duration-seconds 3600)
-              AWS_ACCESS_KEY_ID=$(echo "${CREDS}" | jq -r '.Credentials.AccessKeyId')
-              AWS_SECRET_ACCESS_KEY=$(echo "${CREDS}" | jq -r '.Credentials.SecretAccessKey')
-              AWS_SESSION_TOKEN=$(echo "${CREDS}" | jq -r '.Credentials.SessionToken')
-              export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-              export TF_VAR_aws_region="${AWS_REGION:-eu-central-1}"
-              export TF_VAR_cloud_provider="aws"
-              export TF_VAR_aws_remote_state_bucket="${AWS_TF_STATE_BUCKET}"
-              export TF_VAR_remote_state_bucket="${AWS_TF_STATE_BUCKET}"
-              BACKEND_TYPE="s3"
-              ;;
-            azure)
-              export TF_VAR_client_id="${ARM_CLIENT_ID}"
-              export TF_VAR_client_secret="${ARM_CLIENT_SECRET}"
-              export TF_VAR_tenant_id="${ARM_TENANT_ID}"
-              export TF_VAR_subscription_id="${ARM_SUBSCRIPTION_ID}"
-              export TF_VAR_cloud_provider="azure"
-              BACKEND_TYPE="azurerm"
-              ;;
-            gcp)
-              echo "${GCP_SERVICE_ACCOUNT_KEY}" > gcp-credentials.json
-              export GOOGLE_APPLICATION_CREDENTIALS="${GITHUB_WORKSPACE}/gcp-credentials.json"
-              export TF_VAR_gcp_credentials="${GOOGLE_APPLICATION_CREDENTIALS}"
-              export TF_VAR_gcp_project="${GCP_PROJECT_ID}"
-              export TF_VAR_gcp_region="${GCP_REGION:-europe-central2}"
-              export TF_VAR_gcp_zone="${GCP_ZONE:-europe-central2-a}"
-              export TF_VAR_cloud_provider="gcp"
-              BACKEND_TYPE="gcs"
-              ;;
-            *)
-              echo "ERROR: Unsupported cloud provider: ${CLOUD_PROVIDER}. Must be one of: aws, azure, gcp" >&2
-              exit 1
-              ;;
-          esac
-          cd "${TF_ROOT}"
-          echo "Initializing Terraform with ${BACKEND_TYPE} backend..."
-          cp "backends/${BACKEND_TYPE}.tf" backend_override.tf
-          case "${CLOUD_PROVIDER}" in
-            aws)
-              terraform init -reconfigure -upgrade \
-                -backend-config="backends/s3.hcl" \
-                -backend-config="bucket=${AWS_TF_STATE_BUCKET}" \
-                -backend-config="key=kubernetes/aws/${WORKSPACE}/terraform.tfstate"
-              ;;
-            azure)
-              terraform init -reconfigure -upgrade -backend-config="backends/azurerm.hcl"
-              ;;
-            gcp)
-              terraform init -reconfigure -upgrade -backend-config="backends/gcs.hcl"
-              ;;
-          esac
-          if terraform workspace list | grep -q "${WORKSPACE}"; then
-            terraform workspace select "${WORKSPACE}"
-          else
-            terraform workspace new "${WORKSPACE}"
-          fi
+          terraform workspace select "${WORKSPACE}" 2>/dev/null || terraform workspace new "${WORKSPACE}"
           echo "Current workspace: $(terraform workspace show)"
-          echo "Planning Terraform infrastructure changes..."
+
+      - name: Terraform plan
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          set -eu
           terraform plan \
-            --var-file="./tfvars_files/${WORKSPACE}.tfvars" \
+            --var-file="./tfvars_files/${ENVIRONMENT}.tfvars" \
             -var project_name="${PROJECT_NAMESPACE}" \
             -out=tfplan
           terraform show -json tfplan > plan.json
-          echo "Terraform plan completed and saved to tfplan."
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: tfplan-${{ inputs.cloud_provider }}-${{ inputs.environment_name }}
           path: |
@@ -354,14 +277,8 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-  # ---------------------------------------------------------------------------
-  # Port of the `apply` job (GitLab `when: manual`). STRUCTURAL ONLY - see
-  # header comment. Only runs when workflow_dispatch's `action` input is
-  # `apply`. GitLab's `environment: ... on_stop: destroy` has no GitHub
-  # Actions Environments equivalent wired up yet (follow-up, not this task).
-  # ---------------------------------------------------------------------------
   apply:
-    name: Terraform apply (manual, structural port - unverified)
+    name: Terraform apply
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply'
     needs: plan
@@ -373,117 +290,65 @@ jobs:
       CLOUD_PROVIDER: ${{ inputs.cloud_provider }}
       ENVIRONMENT: ${{ inputs.environment_name }}
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-      AWS_TF_STATE_BUCKET: ${{ secrets.AWS_TF_STATE_BUCKET }}
-      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_TF_STATE_BUCKET: ${{ secrets.AWS_TF_STATE_BUCKET || vars.AWS_TF_STATE_BUCKET }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'eu-central-1' }}
       ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
       ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-      GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+      AZURE_TF_STATE_RESOURCE_GROUP: ${{ vars.AZURE_TF_STATE_RESOURCE_GROUP }}
+      AZURE_TF_STATE_STORAGE_ACCOUNT: ${{ vars.AZURE_TF_STATE_STORAGE_ACCOUNT }}
+      AZURE_TF_STATE_CONTAINER: ${{ vars.AZURE_TF_STATE_CONTAINER }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.GCP_REGION }}
-      GCP_ZONE: ${{ vars.GCP_ZONE }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      GCP_SERVICE_ACCOUNT_EMAIL: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+      GCP_TF_STATE_BUCKET: ${{ vars.GCP_TF_STATE_BUCKET }}
+      GCP_REGION: ${{ vars.GCP_REGION || 'europe-central2' }}
+      GCP_ZONE: ${{ vars.GCP_ZONE || 'europe-central2-a' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
-      - uses: hashicorp/setup-terraform@v4
+      - name: Configure cloud provider
+        id: cloud
+        uses: ./.github/actions/terraform-cloud-setup
+        with:
+          cloud_provider: ${{ env.CLOUD_PROVIDER }}
+          environment: ${{ env.ENVIRONMENT }}
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: tfplan-${{ inputs.cloud_provider }}-${{ inputs.environment_name }}
           path: ${{ env.TF_ROOT }}
 
-      - name: Cloud login + terraform init + apply (unverified until cloud credentials are wired up)
+      - name: Terraform init
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          cp "backends/${{ steps.cloud.outputs.backend_type }}.tf" backend_override.tf
+          terraform init -reconfigure -upgrade ${{ steps.cloud.outputs.backend_args }}
+
+      - name: Terraform workspace select
+        working-directory: ${{ env.TF_ROOT }}
+        env:
+          WORKSPACE: ${{ steps.cloud.outputs.workspace }}
         run: |
           set -eu
-          : "${CLOUD_PROVIDER:?workflow_dispatch input cloud_provider is required}"
-          WORKSPACE="${ENVIRONMENT:-dev}"
-          echo "Using workspace ${WORKSPACE}"
-          case "${CLOUD_PROVIDER}" in
-            aws)
-              : "${AWS_ROLE_ARN:?Set the AWS_ROLE_ARN secret to the IAM role trusted for GitHub OIDC federation}"
-              GH_OIDC_TOKEN=$(curl -sSL -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-                "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" | jq -r '.value')
-              CREDS=$(aws sts assume-role-with-web-identity \
-                --role-arn "${AWS_ROLE_ARN}" \
-                --role-session-name "gha-${GITHUB_RUN_ID}" \
-                --web-identity-token "${GH_OIDC_TOKEN}" \
-                --duration-seconds 3600)
-              AWS_ACCESS_KEY_ID=$(echo "${CREDS}" | jq -r '.Credentials.AccessKeyId')
-              AWS_SECRET_ACCESS_KEY=$(echo "${CREDS}" | jq -r '.Credentials.SecretAccessKey')
-              AWS_SESSION_TOKEN=$(echo "${CREDS}" | jq -r '.Credentials.SessionToken')
-              export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-              export TF_VAR_aws_region="${AWS_REGION:-eu-central-1}"
-              export TF_VAR_cloud_provider="aws"
-              export TF_VAR_aws_remote_state_bucket="${AWS_TF_STATE_BUCKET}"
-              export TF_VAR_remote_state_bucket="${AWS_TF_STATE_BUCKET}"
-              BACKEND_TYPE="s3"
-              ;;
-            azure)
-              export TF_VAR_client_id="${ARM_CLIENT_ID}"
-              export TF_VAR_client_secret="${ARM_CLIENT_SECRET}"
-              export TF_VAR_tenant_id="${ARM_TENANT_ID}"
-              export TF_VAR_subscription_id="${ARM_SUBSCRIPTION_ID}"
-              export TF_VAR_cloud_provider="azure"
-              BACKEND_TYPE="azurerm"
-              ;;
-            gcp)
-              echo "${GCP_SERVICE_ACCOUNT_KEY}" > gcp-credentials.json
-              export GOOGLE_APPLICATION_CREDENTIALS="${GITHUB_WORKSPACE}/gcp-credentials.json"
-              export TF_VAR_gcp_credentials="${GOOGLE_APPLICATION_CREDENTIALS}"
-              export TF_VAR_gcp_project="${GCP_PROJECT_ID}"
-              export TF_VAR_gcp_region="${GCP_REGION:-europe-central2}"
-              export TF_VAR_gcp_zone="${GCP_ZONE:-europe-central2-a}"
-              export TF_VAR_cloud_provider="gcp"
-              BACKEND_TYPE="gcs"
-              ;;
-            *)
-              echo "ERROR: Unsupported cloud provider: ${CLOUD_PROVIDER}. Must be one of: aws, azure, gcp" >&2
-              exit 1
-              ;;
-          esac
-          cd "${TF_ROOT}"
-          echo "Initializing Terraform with ${BACKEND_TYPE} backend..."
-          cp "backends/${BACKEND_TYPE}.tf" backend_override.tf
-          case "${CLOUD_PROVIDER}" in
-            aws)
-              terraform init -reconfigure -upgrade \
-                -backend-config="backends/s3.hcl" \
-                -backend-config="bucket=${AWS_TF_STATE_BUCKET}" \
-                -backend-config="key=kubernetes/aws/${WORKSPACE}/terraform.tfstate"
-              ;;
-            azure)
-              terraform init -reconfigure -upgrade -backend-config="backends/azurerm.hcl"
-              ;;
-            gcp)
-              terraform init -reconfigure -upgrade -backend-config="backends/gcs.hcl"
-              ;;
-          esac
-          if terraform workspace list | grep -q "${WORKSPACE}"; then
-            terraform workspace select "${WORKSPACE}"
-          else
-            terraform workspace new "${WORKSPACE}"
-          fi
+          terraform workspace select "${WORKSPACE}"
           echo "Current workspace: $(terraform workspace show)"
-          echo "Applying Terraform infrastructure changes..."
-          terraform apply -auto-approve tfplan
-          echo "Terraform apply completed successfully."
 
-  # ---------------------------------------------------------------------------
-  # Port of the `destroy` job (GitLab `when: manual`, `allow_failure: true`).
-  # STRUCTURAL ONLY - see header comment. Only runs when workflow_dispatch's
-  # `action` input is `destroy`.
-  # ---------------------------------------------------------------------------
+      - name: Terraform apply
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform apply -auto-approve tfplan
+
   destroy:
-    name: Terraform destroy (manual, structural port - unverified)
+    name: Terraform destroy
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy'
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy' && inputs.confirm_destroy == format('destroy-{0}-{1}', inputs.cloud_provider, inputs.environment_name)
     needs: validate
     environment: ${{ inputs.environment_name }}
-    continue-on-error: true
     permissions:
       contents: read
       id-token: write
@@ -491,103 +356,53 @@ jobs:
       CLOUD_PROVIDER: ${{ inputs.cloud_provider }}
       ENVIRONMENT: ${{ inputs.environment_name }}
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-      AWS_TF_STATE_BUCKET: ${{ secrets.AWS_TF_STATE_BUCKET }}
-      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_TF_STATE_BUCKET: ${{ secrets.AWS_TF_STATE_BUCKET || vars.AWS_TF_STATE_BUCKET }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'eu-central-1' }}
       ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
       ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-      GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+      AZURE_TF_STATE_RESOURCE_GROUP: ${{ vars.AZURE_TF_STATE_RESOURCE_GROUP }}
+      AZURE_TF_STATE_STORAGE_ACCOUNT: ${{ vars.AZURE_TF_STATE_STORAGE_ACCOUNT }}
+      AZURE_TF_STATE_CONTAINER: ${{ vars.AZURE_TF_STATE_CONTAINER }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.GCP_REGION }}
-      GCP_ZONE: ${{ vars.GCP_ZONE }}
-      PROJECT_NAMESPACE: ${{ vars.PROJECT_NAMESPACE }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      GCP_SERVICE_ACCOUNT_EMAIL: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+      GCP_TF_STATE_BUCKET: ${{ vars.GCP_TF_STATE_BUCKET }}
+      GCP_REGION: ${{ vars.GCP_REGION || 'europe-central2' }}
+      GCP_ZONE: ${{ vars.GCP_ZONE || 'europe-central2-a' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
-      - uses: hashicorp/setup-terraform@v4
+      - name: Configure cloud provider
+        id: cloud
+        uses: ./.github/actions/terraform-cloud-setup
+        with:
+          cloud_provider: ${{ env.CLOUD_PROVIDER }}
+          environment: ${{ env.ENVIRONMENT }}
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
-      - name: Cloud login + terraform init + destroy (unverified until cloud credentials are wired up)
+      - name: Terraform init
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          cp "backends/${{ steps.cloud.outputs.backend_type }}.tf" backend_override.tf
+          terraform init -reconfigure -upgrade ${{ steps.cloud.outputs.backend_args }}
+
+      - name: Terraform workspace select
+        working-directory: ${{ env.TF_ROOT }}
+        env:
+          WORKSPACE: ${{ steps.cloud.outputs.workspace }}
         run: |
           set -eu
-          : "${CLOUD_PROVIDER:?workflow_dispatch input cloud_provider is required}"
-          WORKSPACE="${ENVIRONMENT:-dev}"
-          echo "Using workspace ${WORKSPACE}"
-          case "${CLOUD_PROVIDER}" in
-            aws)
-              : "${AWS_ROLE_ARN:?Set the AWS_ROLE_ARN secret to the IAM role trusted for GitHub OIDC federation}"
-              GH_OIDC_TOKEN=$(curl -sSL -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-                "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" | jq -r '.value')
-              CREDS=$(aws sts assume-role-with-web-identity \
-                --role-arn "${AWS_ROLE_ARN}" \
-                --role-session-name "gha-${GITHUB_RUN_ID}" \
-                --web-identity-token "${GH_OIDC_TOKEN}" \
-                --duration-seconds 3600)
-              AWS_ACCESS_KEY_ID=$(echo "${CREDS}" | jq -r '.Credentials.AccessKeyId')
-              AWS_SECRET_ACCESS_KEY=$(echo "${CREDS}" | jq -r '.Credentials.SecretAccessKey')
-              AWS_SESSION_TOKEN=$(echo "${CREDS}" | jq -r '.Credentials.SessionToken')
-              export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-              export TF_VAR_aws_region="${AWS_REGION:-eu-central-1}"
-              export TF_VAR_cloud_provider="aws"
-              export TF_VAR_aws_remote_state_bucket="${AWS_TF_STATE_BUCKET}"
-              export TF_VAR_remote_state_bucket="${AWS_TF_STATE_BUCKET}"
-              BACKEND_TYPE="s3"
-              ;;
-            azure)
-              export TF_VAR_client_id="${ARM_CLIENT_ID}"
-              export TF_VAR_client_secret="${ARM_CLIENT_SECRET}"
-              export TF_VAR_tenant_id="${ARM_TENANT_ID}"
-              export TF_VAR_subscription_id="${ARM_SUBSCRIPTION_ID}"
-              export TF_VAR_cloud_provider="azure"
-              BACKEND_TYPE="azurerm"
-              ;;
-            gcp)
-              echo "${GCP_SERVICE_ACCOUNT_KEY}" > gcp-credentials.json
-              export GOOGLE_APPLICATION_CREDENTIALS="${GITHUB_WORKSPACE}/gcp-credentials.json"
-              export TF_VAR_gcp_credentials="${GOOGLE_APPLICATION_CREDENTIALS}"
-              export TF_VAR_gcp_project="${GCP_PROJECT_ID}"
-              export TF_VAR_gcp_region="${GCP_REGION:-europe-central2}"
-              export TF_VAR_gcp_zone="${GCP_ZONE:-europe-central2-a}"
-              export TF_VAR_cloud_provider="gcp"
-              BACKEND_TYPE="gcs"
-              ;;
-            *)
-              echo "ERROR: Unsupported cloud provider: ${CLOUD_PROVIDER}. Must be one of: aws, azure, gcp" >&2
-              exit 1
-              ;;
-          esac
-          cd "${TF_ROOT}"
-          echo "Initializing Terraform with ${BACKEND_TYPE} backend..."
-          cp "backends/${BACKEND_TYPE}.tf" backend_override.tf
-          case "${CLOUD_PROVIDER}" in
-            aws)
-              terraform init -reconfigure -upgrade \
-                -backend-config="backends/s3.hcl" \
-                -backend-config="bucket=${AWS_TF_STATE_BUCKET}" \
-                -backend-config="key=kubernetes/aws/${WORKSPACE}/terraform.tfstate"
-              ;;
-            azure)
-              terraform init -reconfigure -upgrade -backend-config="backends/azurerm.hcl"
-              ;;
-            gcp)
-              terraform init -reconfigure -upgrade -backend-config="backends/gcs.hcl"
-              ;;
-          esac
-          if terraform workspace list | grep -q "${WORKSPACE}"; then
-            terraform workspace select "${WORKSPACE}"
-          else
-            terraform workspace new "${WORKSPACE}"
-          fi
+          terraform workspace select "${WORKSPACE}"
           echo "Current workspace: $(terraform workspace show)"
-          echo "Planning infrastructure destruction (dry-run)..."
-          terraform plan -destroy \
-            --var-file="./tfvars_files/${WORKSPACE}.tfvars" \
-            -var project_name="${PROJECT_NAMESPACE}"
-          echo "Executing infrastructure destruction..."
+
+      - name: Terraform destroy
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
           terraform destroy -auto-approve \
-            --var-file="./tfvars_files/${WORKSPACE}.tfvars" \
+            --var-file="./tfvars_files/${ENVIRONMENT}.tfvars" \
             -var project_name="${PROJECT_NAMESPACE}"
-          echo "Terraform destroy completed successfully."

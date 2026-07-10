@@ -43,6 +43,7 @@ provider "azurerm" {
   client_secret   = local.azure_client_secret
   tenant_id       = local.azure_tenant_id
   subscription_id = local.azure_subscription_id
+  use_oidc        = local.azure_use_oidc
 }
 
 provider "google" {
@@ -58,9 +59,10 @@ provider "aws" {
 
 locals {
   azure_client_id       = var.cloud_provider == "azure" ? var.client_id : null
-  azure_client_secret   = var.cloud_provider == "azure" ? var.client_secret : null
+  azure_client_secret   = var.cloud_provider == "azure" && var.client_secret != "" ? var.client_secret : null
   azure_tenant_id       = var.cloud_provider == "azure" ? var.tenant_id : null
   azure_subscription_id = var.cloud_provider == "azure" ? var.subscription_id : null
+  azure_use_oidc        = var.cloud_provider == "azure" && var.client_secret == "" ? true : null
 
   google_project     = var.cloud_provider == "gcp" ? var.gcp_project : null
   google_region      = var.cloud_provider == "gcp" ? var.gcp_region : null

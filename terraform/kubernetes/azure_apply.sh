@@ -2,6 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+# shellcheck source=terraform/kubernetes/scripts/_common.sh
+source "${SCRIPT_DIR}/scripts/_common.sh"
 BOOTSTRAP_ENV_FILE="${BOOTSTRAP_ENV_FILE:-${SCRIPT_DIR}/../../../utilities/scripts/.env.bootstrap}"
 
 load_bootstrap_env_defaults() {
@@ -42,10 +44,11 @@ AZURE_TF_STATE_RESOURCE_GROUP="${AZURE_TF_STATE_RESOURCE_GROUP:-${AZURE_STATE_RE
 AZURE_TF_STATE_STORAGE_ACCOUNT="${AZURE_TF_STATE_STORAGE_ACCOUNT:-${AZURE_STATE_STORAGE_ACCOUNT:-}}"
 AZURE_TF_STATE_CONTAINER="${AZURE_TF_STATE_CONTAINER:-${AZURE_STATE_CONTAINER:-tfstate}}"
 
-ENVIRONMENT="${ENVIRONMENT:-prod}"
+ENVIRONMENT="${ENVIRONMENT:-dev}"
 PROJECT_NAMESPACE="${PROJECT_NAMESPACE:-danielgherasim-microservices}"
 CLOUD_PROVIDER="${CLOUD_PROVIDER:-azure}"
 AZURE_KUBERNETES_TF_STATE_KEY="${AZURE_KUBERNETES_TF_STATE_KEY:-kubernetes.tfstate}"
+VAR_FILE="$(require_tfvars_file "${ENVIRONMENT}")"
 
 if [ -z "${ARM_CLIENT_ID:-}" ] || [ -z "${ARM_CLIENT_SECRET:-}" ] || [ -z "${ARM_TENANT_ID:-}" ] || [ -z "${ARM_SUBSCRIPTION_ID:-}" ]; then
   echo "Error: Azure credentials not set. Set ARM_CLIENT_ID, ARM_CLIENT_SECRET, ARM_TENANT_ID, and ARM_SUBSCRIPTION_ID." >&2
@@ -79,18 +82,13 @@ export TF_VAR_azure_remote_state_storage_account=$AZURE_TF_STATE_STORAGE_ACCOUNT
 export TF_VAR_azure_remote_state_container=$AZURE_TF_STATE_CONTAINER
 
 echo "=== [INFO] Initializing Terraform ==="
-cp backends/azurerm.tf backend_override.tf
-terraform init -reconfigure \
-  -backend-config="resource_group_name=${AZURE_TF_STATE_RESOURCE_GROUP}" \
-  -backend-config="storage_account_name=${AZURE_TF_STATE_STORAGE_ACCOUNT}" \
-  -backend-config="container_name=${AZURE_TF_STATE_CONTAINER}" \
-  -backend-config="key=${AZURE_KUBERNETES_TF_STATE_KEY}"
+terraform_init_backend "azure"
 
 echo "=== [INFO] Selecting workspace: $ENVIRONMENT ==="
-terraform workspace select "$ENVIRONMENT" || terraform workspace new "$ENVIRONMENT"
+terraform_select_or_create_workspace "${ENVIRONMENT}"
 
 echo "=== [INFO] Creating Terraform plan ==="
-terraform plan --var-file=./tfvars_files/$ENVIRONMENT.tfvars -var project_name="$PROJECT_NAMESPACE" -out=tfplan
+terraform plan --var-file="${VAR_FILE}" -var project_name="$PROJECT_NAMESPACE" -out=tfplan
 
 echo ""
 echo "=== [CONFIRMATION] Do you want to apply these changes? (yes/no) ==="
